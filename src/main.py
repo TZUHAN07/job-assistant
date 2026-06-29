@@ -1,4 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.database import get_db 
 
 app = FastAPI(
     title="job-assistant",
@@ -8,9 +11,14 @@ app = FastAPI(
 
 
 @app.get("/health")
-async def health_check():
+async def health_check(db: AsyncSession = Depends(get_db)):
     """Health check endpoint for uptime monitoring."""
-    return {"status": "ok", "service": "job-assistant"}
+    try:
+        await db.execute(text("SELECT 1"))
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+    return {"status": "ok", "service": "job-assistant", "db_status": db_status, }
 
 
 @app.get("/")
