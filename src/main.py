@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.database import get_db 
+from src.database import get_db
+
+from src.routers import resume as resume_router
 
 app = FastAPI(
     title="job-assistant",
@@ -18,7 +20,11 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         db_status = "connected"
     except Exception as e:
         db_status = f"error: {str(e)}"
-    return {"status": "ok", "service": "job-assistant", "db_status": db_status, }
+    return {
+        "status": "ok",
+        "service": "job-assistant",
+        "db_status": db_status,
+    }
 
 
 @app.get("/")
@@ -28,3 +34,6 @@ async def root():
         "docs": "/docs",
         "health": "/health",
     }
+
+
+app.include_router(resume_router.router)
