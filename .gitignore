@@ -60,3 +60,6 @@ htmlcov/
 # Project specific
 data/uploaded_resumes/
 data/cached_jds/
+
+# Scratch / experimental code (not committed)
+scratch/
