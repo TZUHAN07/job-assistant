@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from io import BytesIO
 from typing import Annotated
 
@@ -10,6 +9,7 @@ from starlette import status
 from src.database import get_db
 from src.models.resume import Resume
 from src.services.llm_service import extract_resume_structured
+from src.utils.time_utils import utc_now
 
 import logging
 
@@ -47,12 +47,14 @@ async def upload_resume(
         llm_result = await extract_resume_structured(content_text)
 
         if llm_result:
-            logger.info(f"Resume extracted: name={llm_result.name!r}, skills={len(llm_result.skills)}")
+            logger.info(
+                f"Resume extracted: name={llm_result.name!r}, skills={len(llm_result.skills)}"
+            )
         else:
             logger.warning(f"LLM extraction failed (partial save): {filename}")
 
         parsed_data = llm_result.model_dump() if llm_result else None
-        processed_at = datetime.now(timezone.utc) if llm_result else None
+        processed_at = utc_now() if llm_result else None
 
         new_resume = Resume(
             filename=filename,
@@ -81,7 +83,8 @@ async def upload_resume(
                 "uploaded_at": new_resume.uploaded_at,
                 "extracted_text": (
                     content_text[:200] + "..."
-                    if len(content_text) > 200 else content_text
+                    if len(content_text) > 200
+                    else content_text
                 ),
                 "processed_at": new_resume.processed_at,
                 "parsed_data": new_resume.parsed_data,
