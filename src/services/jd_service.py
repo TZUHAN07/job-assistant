@@ -26,7 +26,7 @@ async def extract_with_llm(content_text: str) -> Optional[JobParsed]:
     Private helper: Call Gemini + Instructor to extract JobParsed from raw text.
     Shared by extract_from_url and extract_from_text.
     """
-     
+
     if len(content_text) > MAX_CONTENT_LENGTH:
         logger.warning(
             f"Content truncated: {len(content_text)} -> {MAX_CONTENT_LENGTH}"
@@ -70,7 +70,15 @@ async def extract_with_llm(content_text: str) -> Optional[JobParsed]:
         return None
 
 
-async def extract_from_url(url: str) -> Optional[JobParsed]:
+async def extract_from_url(url: str) -> tuple[Optional[str], Optional[JobParsed]]:
+    """
+    Scrape URL then extract structured data.
+
+    Returns:
+        (raw_markdown, parsed_result) tuple:
+        - raw_markdown=None if Firecrawl fails
+        - parsed_result=None if LLM fails (partial save still possible)
+    """
 
     logger.info(f"Scraping JD from URL: {url}")
 
@@ -80,14 +88,17 @@ async def extract_from_url(url: str) -> Optional[JobParsed]:
         markdown = response.markdown or ""
 
         if not markdown or len(markdown) < 100:
-            logger.warning(f"Firecrawl  content too short ({len(markdown)} chars): {url}")
-            return None
-
-        return await extract_with_llm(markdown)
+            logger.warning(
+                f"Firecrawl  content too short ({len(markdown)} chars): {url}"
+            )
+            return None, None
 
     except Exception:
-        logger.exception(f"Firecrawl scraping failed for URL {url} ")
-        return None
+        logger.exception(f"Firecrawl s craping failed for URL {url} ")
+        return None, None
+
+    parsed = await extract_with_llm(markdown)
+    return markdown, parsed
 
 
 async def extract_from_text(text: str) -> Optional[JobParsed]:
