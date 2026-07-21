@@ -1,3 +1,5 @@
 from src.schemas.resume_parsed import Education, Experience, ResumeParsed
 
-__all__ = ["ResumeParsed", "Experience", "Education"]
+from src.schemas.job_parsed import JobParsed
+
+__all__ = ["ResumeParsed", "Experience", "Education", "JobParsed"]
