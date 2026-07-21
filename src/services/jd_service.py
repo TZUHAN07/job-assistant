@@ -38,6 +38,7 @@ async def extract_with_llm(content_text: str) -> Optional[JobParsed]:
         "你的唯一任務是仔細閱讀原始職缺文字，並精確地將資訊分類填入指定的 Schema 中。\n"
         "請務必使用『繁體中文』回答所有的文字、描述與摘要欄位（除了公司名等專有名詞可保持原文）。\n"
         "保持客觀，不要自行發明或虛構職缺中不存在的技能或經歷。"
+        "若 JD 中未明確提及某個欄位（如薪資、公司名），請填入空字串 '' 而非 'None' 字串。"
     )
 
     user_prompt = f"這是職缺的原始文字：\n\n{content_text}\n\n請幫我提取結構化資料。"
