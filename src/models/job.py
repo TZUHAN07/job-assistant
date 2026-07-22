@@ -23,10 +23,9 @@ class Job(Base):
         nullable=False,
     )
     processed_at: Mapped[Optional[datetime]] = mapped_column(
-    DateTime(timezone=True),
-    nullable=True,        
-)
-
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     def __repr__(self) -> str:
         return f"<Job(id={self.id}, source_type={self.source_type!r})>"
