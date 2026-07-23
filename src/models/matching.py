@@ -20,9 +20,10 @@ class Matching(Base):
         Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True
     )
     score: Mapped[ Optional[int]] = mapped_column(Integer, nullable=True)
-    match_reasons: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    match_reasons: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     matched_skills: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     missing_skills: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    recommendations: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
