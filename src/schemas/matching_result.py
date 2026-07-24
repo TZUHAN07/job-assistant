@@ -13,10 +13,20 @@ class MatchingResult(BaseModel):
     matched_skills: List[str] = Field(default_factory=list, description="求職者具備且符合 JD 要求的技能交集清單 (例如: ['Python', 'FastAPI'])。",)
     missing_skills: List[str] = Field(default_factory=list,
         description="JD 要求但求職者履歷中未提及或較弱的技能/經驗 Gap (例如: ['Kubernetes', 'AWS'])。",)
-    recommendations: List[str] = Field(
+    quick_wins: List[str] = Field(
         default_factory=list,
-        description="針對 Missing Skills 與 Gap 給予求職者的具體履歷補強或學習建議 (2-3 點清單)。",
-    )    
+        description=(
+            "短期 (1-2 週) 可快速補強的具體 action, 2-3 點。"
+            "例: 'Node.js 專案改為 TypeScript, 展示 type-safe 開發能力'"
+        ),
+    )
+    long_term_goals: List[str] = Field(
+        default_factory=list,
+        description=(
+            "長期 (1-3 個月) 累積的核心技能, 2-3 點。"
+            "例: '學習 RAG , 完成小型 semantic search side project'"
+        ),
+    )
     score: int = Field(
         default=0,
         ge=0,

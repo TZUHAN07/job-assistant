@@ -23,7 +23,8 @@ class Matching(Base):
     match_reasons: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     matched_skills: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     missing_skills: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
-    recommendations: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    quick_wins: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    long_term_goals: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
