@@ -31,15 +31,20 @@ SYSTEM_INSTRUCTION = """你是專業的求職顧問, 專精於撰寫台灣科技
 3. Why Fit (為何合這公司)：展現對公司/職位的理解, 說明如何貢獻
 4. Call to Action (行動呼籲)：邀請面試, 表達期待
 
+【收件人稱謂 Fallback】
+- 若職缺資訊中有明確公司名, 使用「[公司名] 招募團隊 您好」
+- 若職缺資訊缺公司名 or 是空字串 or "未知公司", 統一改用「招募團隊 您好」
+- 絕不寫「未知公司 招募團隊」或類似奇怪組合
+
 【tone 控制】
 - professional (預設): 真誠、專業、正式、有信心、避免「本人」「敝人」老派用語
 - casual: 稍口語, 適合 startup 文化
 - formal: 極正式、真誠, 適合大型企業
-- 稱呼收件者為「[公司名稱] 招募團隊 / 招募主管 您好」。
+- enthusiastic (若指定): 熱情積極, 展現對職位強烈興趣
 
 【具體證據導向 (Evidence-based)】
-   - 善用 MatchingResult 中的 `match_reasons` 與 `matched_skills`。
-   - 舉例時必須提及具體的專案經驗 (例如: 解決 Cloudflare + Nginx WebSocket 部署問題、搭建 CI/CD 流程等)，用數字或具體成果說話，而非只空談「我很有熱情」。
+- 善用 MatchingResult 中的 `match_reasons` 與 `matched_skills`。
+- 舉例時必須提及具體的專案經驗 (例如: 解決 Cloudflare + Nginx WebSocket 部署問題、搭建 CI/CD 流程等)，用數字或具體成果說話，而非只空談「我很有熱情」。
 
 
 【語言】
@@ -72,7 +77,13 @@ async def generate_cover_letter(
         None: LLM fail (partial save fallback)
     """
 
-    user_prompt = f"""請根據以下資訊, 撰寫一封 {tone} tone 的求職信:
+    user_prompt = f"""請根據以下資訊, 撰寫一封 {tone} 語氣 (Tone) 的求職信。
+
+
+【指定語言】{language}
+- 若 zh-TW: 使用台灣軟體業常用術語, 保留 Docker / FastAPI 等專有名詞原文
+- 若 en-US: 使用專業商業英文, 避免中文夾雜
+- 其他語言: 使用該語言標準商業書信格式
 
 === 候選人履歷 (Resume) ===
 {resume.model_dump_json(indent=2)}
@@ -95,7 +106,6 @@ Missing Skills: {matching.missing_skills}
             f"Input prompt length ({len(user_prompt)}) exceeds safety threshold ({MAX_CONTENT_LENGTH})"
         )
 
-
     try:
         result: CoverLetterResult = await llm_client.create(
             response_model=CoverLetterResult,
@@ -103,12 +113,12 @@ Missing Skills: {matching.missing_skills}
                 {"role": "system", "content": SYSTEM_INSTRUCTION},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.7,     
+            temperature=0.7,
             max_retries=3,
         )
         logger.info(
             f"Cover letter generated: title={result.title!r}, "
-            f"content_length={len(result.content)}"
+            f"content_length={len(result.full_content)}"
         )
         return result
 
