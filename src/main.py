@@ -6,6 +6,7 @@ from src.database import get_db
 from src.routers import resume as resume_router
 from src.routers import jobs as jobs_router
 from src.routers import matchings as matchings_router
+from src.routers import cover_letters as cover_letters_router
 
 app = FastAPI(
     title="job-assistant",
@@ -41,3 +42,4 @@ async def root():
 app.include_router(resume_router.router)
 app.include_router(jobs_router.router)
 app.include_router(matchings_router.router)
+app.include_router(cover_letters_router.router)
