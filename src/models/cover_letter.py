@@ -1,9 +1,13 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database import Base
+
+if TYPE_CHECKING:
+    from src.models.matching import Matching
 
 
 class CoverLetter(Base):
@@ -37,6 +41,7 @@ class CoverLetter(Base):
         server_default=func.now(),
         nullable=False,
     )
+    matching: Mapped["Matching"] = relationship(back_populates="cover_letters")
 
     def __repr__(self) -> str:
         return f"<CoverLetter(id={self.id}, matching_id={self.matching_id}, version={self.version}, title={self.title!r})>"

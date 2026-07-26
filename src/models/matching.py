@@ -1,11 +1,16 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional,  TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, func
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database import Base
+
+if TYPE_CHECKING:
+    from src.models.resume import Resume
+    from src.models.job import Job
+    from src.models.cover_letter import CoverLetter
 
 
 class Matching(Base):
@@ -34,6 +39,9 @@ class Matching(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    resume: Mapped["Resume"] = relationship(back_populates="matchings")
+    job: Mapped["Job"] = relationship(back_populates="matchings")
+    cover_letters: Mapped[list["CoverLetter"]] = relationship(back_populates="matching")
 
     def __repr__(self) -> str:
         return f"<Matching(id={self.id}, resume_id={self.resume_id}, job_id={self.job_id}, score={self.score})>"

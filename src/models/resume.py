@@ -1,11 +1,14 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import Integer, String, Text, DateTime, func
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database import Base
+
+if TYPE_CHECKING:
+    from src.models.matching import Matching
 
 
 class Resume(Base):
@@ -27,6 +30,7 @@ class Resume(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    matchings: Mapped[list["Matching"]] = relationship(back_populates="resume")
 
     def __repr__(self) -> str:
         return f"<Resume(id={self.id}, filename={self.filename!r})>"
