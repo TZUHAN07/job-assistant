@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_db
@@ -43,3 +44,6 @@ app.include_router(resume_router.router)
 app.include_router(jobs_router.router)
 app.include_router(matchings_router.router)
 app.include_router(cover_letters_router.router)
+
+
+app.mount("/app", StaticFiles(directory="static", html=True), name="static")
