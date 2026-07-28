@@ -1,10 +1,11 @@
 from typing import Annotated
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from starlette import status
 
 from src.database import get_db
@@ -18,9 +19,11 @@ logger = logging.getLogger(__name__)
 
 db_dependency = Annotated[AsyncSession, Depends(get_db)]
 
+
 class MatchingScoreRequest(BaseModel):
     resume_id: int = Field(..., gt=0, description="Resume ID from DB")
     job_id: int = Field(..., gt=0, description="Job ID from DB")
+
 
 @router.post("/score", status_code=status.HTTP_201_CREATED)
 async def calculate_score(
@@ -54,10 +57,8 @@ async def calculate_score(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Resume {body.resume_id} has no parsed_data (LLM 尚未處理)",
             )
-        
-        job_result = await db.execute(
-            select(Job).where(Job.id == body.job_id)
-        )
+
+        job_result = await db.execute(select(Job).where(Job.id == body.job_id))
         job_row = job_result.scalar_one_or_none()
 
         if not job_row:
@@ -71,7 +72,7 @@ async def calculate_score(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Job {body.job_id} has no parsed_data (LLM 尚未處理)",
             )
-        
+
         resume_parsed = ResumeParsed(**resume_row.parsed_data)
         job_parsed = JobParsed(**job_row.parsed_data)
 
@@ -85,7 +86,9 @@ async def calculate_score(
                 f"matched={len(matching_result.matched_skills)}"
             )
         else:
-            logger.warning(f"LLM matching failed (partial save): {body.resume_id} × {body.job_id}")
+            logger.warning(
+                f"LLM matching failed (partial save): {body.resume_id} × {body.job_id}"
+            )
 
         matching_data = matching_result.model_dump() if matching_result else {}
         processed_at = utc_now() if matching_result else None
@@ -103,8 +106,7 @@ async def calculate_score(
         logger.info(f"Matching {new_matching.id} saved")
 
         message = (
-            "匹配評分成功" if matching_result
-            else "資料已保存, LLM 評分失敗待重試"
+            "匹配評分成功" if matching_result else "資料已保存, LLM 評分失敗待重試"
         )
 
         return {
@@ -123,13 +125,74 @@ async def calculate_score(
                 "created_at": new_matching.created_at,
             },
         }
-    
+
     except HTTPException:
         raise
 
     except Exception as e:
         await db.rollback()
-        logger.exception(f"Unexpected error during matching calculation: {str(e)}")
+        logger.exception("Unexpected error during matching calculation")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"處理失敗: {str(e)}",
+        )
+
+
+@router.get("/{matching_id}", status_code=status.HTTP_200_OK)
+async def get_matching(
+    db: db_dependency,
+    matching_id: int = Path(..., gt=0, title="Matching ID"),
+):
+    """
+    Retrieve a Matching record by ID.
+
+    - Returns the matching data if found
+    - Raises 404 if not found
+    """
+
+    try:
+        matching_result = await db.execute(
+            select(Matching)
+            .where(Matching.id == matching_id)
+            .options(selectinload(Matching.resume), selectinload(Matching.job))
+        )
+        matching_row = matching_result.scalar_one_or_none()
+
+        if not matching_row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Matching {matching_id} not found",
+            )
+
+        resume_parsed = matching_row.resume.parsed_data or {}
+        job_parsed = matching_row.job.parsed_data or {}
+
+        return {
+            "message": "查詢成功",
+            "data": {
+                "id": matching_row.id,
+                "resume_id": matching_row.resume_id,
+                "job_id": matching_row.job_id,
+                "score": matching_row.score,
+                "match_reasons": matching_row.match_reasons,
+                "matched_skills": matching_row.matched_skills,
+                "missing_skills": matching_row.missing_skills,
+                "quick_wins": matching_row.quick_wins,
+                "long_term_goals": matching_row.long_term_goals,
+                "processed_at": matching_row.processed_at,
+                "created_at": matching_row.created_at,
+                "resume_name": resume_parsed.get("name")
+                or matching_row.resume.filename,
+                "job_title": job_parsed.get("title") or "未命名職缺",
+                "job_company": job_parsed.get("company") or "",
+            },
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        logger.exception("Unexpected error during matching retrieval")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"處理失敗: {str(e)}",
