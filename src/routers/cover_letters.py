@@ -1,7 +1,7 @@
 from typing import Annotated
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -117,6 +117,10 @@ async def generate(
             matching_id=body.matching_id,
             title=letter_result.title,
             content=letter_result.full_content,
+            opening=letter_result.opening,
+            why_me=letter_result.why_me,
+            why_company=letter_result.why_company,
+            call_to_action=letter_result.call_to_action,
             version=next_version,
             tone=body.tone,
             language=body.language,
@@ -126,6 +130,7 @@ async def generate(
         await db.refresh(new_letter)
 
         logger.info(f"Cover letter {new_letter.id} saved (v{new_letter.version})")
+
 
         return {
             "message": "求職信生成成功",
@@ -158,3 +163,46 @@ async def generate(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"處理失敗: {str(e)}",
         )
+
+
+@router.get("", status_code=status.HTTP_200_OK)
+async def list_by_matching(
+    db: db_dependency,
+    matching_id: int = Query(..., gt=0, description="Matching ID to filter"),
+):
+    """
+    List all cover letter versions for a given matching.
+
+    - Returns list ordered by version desc (newest first)
+    - Empty list if no letters yet (not 404)
+    """
+    result = await db.execute(
+        select(CoverLetter)
+        .where(CoverLetter.matching_id == matching_id)
+        .order_by(CoverLetter.version.desc())
+    )
+    letters = result.scalars().all()
+
+    return {
+            "message": "查詢成功",
+            "data": [
+            {
+                "id": letter.id,
+                "matching_id": letter.matching_id,
+                "title": letter.title,
+                "content": letter.content,
+                "version": letter.version,
+                "tone": letter.tone,
+                "language": letter.language,
+                "is_favorite": letter.is_favorite,
+                "created_at": letter.created_at,
+                "sections": {
+                    "opening": letter.opening,
+                    "why_me": letter.why_me,
+                    "why_company": letter.why_company,
+                    "call_to_action": letter.call_to_action,
+                },
+            }
+            for letter in letters
+        ],
+        }
