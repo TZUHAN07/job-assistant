@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import File, UploadFile, APIRouter, Depends, HTTPException
 from pypdf import PdfReader
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
@@ -101,3 +102,25 @@ async def upload_resume(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"檔案處理失敗: {str(e)}",
         )
+
+
+@router.get("", status_code=status.HTTP_200_OK)
+async def list_resumes(db: db_dependency):
+    result = await db.execute(select(Resume).order_by(Resume.uploaded_at.desc()))
+
+    resumes = result.scalars().all()
+    
+    return {
+        "message": "查詢成功",
+        "data": [
+            {
+                "id": resume.id,
+                "filename": resume.filename,
+                "uploaded_at": resume.uploaded_at,
+                "processed_at": resume.processed_at,
+                "resume_name": (resume.parsed_data or {}).get("name") or resume.filename,
+            }
+            for resume in resumes
+        ],
+    }
+
