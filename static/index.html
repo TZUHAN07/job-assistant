@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Job Assistant · Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      .drop-zone.dragover {
+        border-color: #6366f1;
+        background-color: #eef2ff;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-50 min-h-screen">
+    <div class="max-w-5xl mx-auto p-6">
+      <header class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-800">Job Assistant</h1>
+        <p class="text-sm text-gray-500 mt-1">AI 求職助手 · 履歷分析 + JD 匹配 + Cover Letter 生成</p>
+      </header>
+
+      <section id="section-resume" class="bg-white rounded-lg shadow p-6 mb-6">
+      </section>
+
+      <section id="section-job" class="bg-white rounded-lg shadow p-6 mb-6">
+      </section>
+
+      <section id="section-match" class="bg-white rounded-lg shadow p-6 mb-6">
+      </section>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/dashboard.js"></script>
+  </body>
+</html>

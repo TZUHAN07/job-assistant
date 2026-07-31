@@ -3,6 +3,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
@@ -16,12 +17,13 @@ logger = logging.getLogger(__name__)
 
 db_dependency = Annotated[AsyncSession, Depends(get_db)]
 
+
 class ParseUrlRequest(BaseModel):
-     url: str = Field(..., pattern=r"^https?://.+", description="JD URL to scrape")
+    url: str = Field(..., pattern=r"^https?://.+", description="JD URL to scrape")
+
 
 class ParseTextRequest(BaseModel):
-     text: str = Field(..., min_length=50, description="Pasted JD content")
-
+    text: str = Field(..., min_length=50, description="Pasted JD content")
 
 
 @router.post("/parse-url", status_code=status.HTTP_201_CREATED)
@@ -44,7 +46,9 @@ async def parse_jd_from_url(
         processed_at = utc_now() if jd_result else None
 
         if jd_result:
-            logger.info(f"JD extracted: title={jd_result.title!r}, company={jd_result.company!r}")
+            logger.info(
+                f"JD extracted: title={jd_result.title!r}, company={jd_result.company!r}"
+            )
         else:
             logger.warning(f"LLM extraction failed (partial save): {body.url}")
 
@@ -61,10 +65,7 @@ async def parse_jd_from_url(
 
         logger.info(f"Job {new_job.id} saved")
 
-        message = (
-            "JD 解析成功" if jd_result
-            else "JD 抓取成功, LLM 解析失敗待重試"
-        )
+        message = "JD 解析成功" if jd_result else "JD 抓取成功, LLM 解析失敗待重試"
 
         return {
             "message": message,
@@ -88,7 +89,7 @@ async def parse_jd_from_url(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"處理失敗: {str(e)}",
         )
-    
+
 
 @router.post("/parse-text", status_code=status.HTTP_201_CREATED)
 async def parse_jd_from_text(
@@ -103,14 +104,16 @@ async def parse_jd_from_text(
         processed_at = utc_now() if jd_result else None
 
         if jd_result:
-            logger.info(f"JD extracted: title={jd_result.title!r}, company={jd_result.company!r}")
+            logger.info(
+                f"JD extracted: title={jd_result.title!r}, company={jd_result.company!r}"
+            )
         else:
             logger.warning("LLM extraction failed (partial save)")
 
         new_job = Job(
             source_type="text_paste",
-            source_url=None,          
-            raw_content=body.text,   
+            source_url=None,
+            raw_content=body.text,
             parsed_data=parsed_data,
             processed_at=processed_at,
         )
@@ -120,10 +123,7 @@ async def parse_jd_from_text(
 
         logger.info(f"Job {new_job.id} saved")
 
-        message = (
-            "JD 解析成功" if jd_result
-            else "上傳成功, LLM 解析失敗待重試"
-        )
+        message = "JD 解析成功" if jd_result else "上傳成功, LLM 解析失敗待重試"
 
         return {
             "message": message,
@@ -147,3 +147,26 @@ async def parse_jd_from_text(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"處理失敗: {str(e)}",
         )
+
+
+@router.get("", status_code=status.HTTP_200_OK)
+async def list_jobs(db: db_dependency):
+    result = await db.execute(select(Job).order_by(Job.created_at.desc()))
+
+    jobs = result.scalars().all()
+
+    return {
+        "message": "查詢成功",
+        "data": [
+            {
+                "id": job.id,
+                "source_type": job.source_type,
+                "source_url": job.source_url,
+                "created_at": job.created_at,
+                "processed_at": job.processed_at,
+                "job_title": (job.parsed_data or {}).get("title") or "未命名職缺",
+                "job_company": (job.parsed_data or {}).get("company") or "",
+            }
+            for job in jobs
+        ],
+    }
