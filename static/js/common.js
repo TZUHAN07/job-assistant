@@ -117,3 +117,21 @@ async function copyToClipboard(text) {
 function getQueryParam(key) {
   return new URLSearchParams(window.location.search).get(key);
 }
+
+
+/**
+ * HTML escape - 防 XSS
+ * 任何從 backend fetch 的 dynamic string render 到 innerHTML 前一律 wrap
+ * @param {string|null|undefined} str
+ * @returns {string}
+ */
+
+function escapeHtml(str) {
+  if (str == null) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
