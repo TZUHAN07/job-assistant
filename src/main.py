@@ -1,19 +1,41 @@
-from fastapi import FastAPI, Depends
+import logging
+
+from fastapi import FastAPI, Depends, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.database import get_db
+from src.limiter import limiter
 
 from src.routers import resume as resume_router
 from src.routers import jobs as jobs_router
 from src.routers import matchings as matchings_router
 from src.routers import cover_letters as cover_letters_router
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(
     title="job-assistant",
     description="AI 求職助手 — 履歷分析、JD 匹配評分、cover letter 生成",
     version="0.1.0",
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception(f"Unhandled exception on {request.method} {request.url.path}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "伺服器處理失敗, 請稍後再試"},
+    )
 
 
 @app.get("/health")
@@ -22,8 +44,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     try:
         await db.execute(text("SELECT 1"))
         db_status = "connected"
-    except Exception as e:
-        db_status = f"error: {str(e)}"
+    except Exception:
+        db_status = "error"
     return {
         "status": "ok",
         "service": "job-assistant",
