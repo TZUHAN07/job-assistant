@@ -1,13 +1,14 @@
 from io import BytesIO
 from typing import Annotated
 
-from fastapi import File, UploadFile, APIRouter, Depends, HTTPException
+from fastapi import File, UploadFile, APIRouter, Depends, HTTPException, Request
 from pypdf import PdfReader
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
 from src.database import get_db
+from src.limiter import limiter
 from src.models.resume import Resume
 from src.services.llm_service import extract_resume_structured
 from src.utils.time_utils import utc_now
@@ -21,9 +22,13 @@ router = APIRouter(prefix="/resumes", tags=["Resume"])
 
 db_dependency = Annotated[AsyncSession, Depends(get_db)]
 
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/hour")
 async def upload_resume(
+    request: Request,
     db: db_dependency,
     file: UploadFile = File(...),
 ):
@@ -38,6 +43,13 @@ async def upload_resume(
         file_bytes = await file.read()
         filename = file.filename
         file_size = len(file_bytes)
+
+        if file_size > MAX_UPLOAD_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"檔案過大, 上限 {MAX_UPLOAD_SIZE // 1024 // 1024}MB",
+            )
+
         logger.info(f"Upload received: {filename} ({file_size} bytes)")
 
         reader = PdfReader(BytesIO(file_bytes))
@@ -95,21 +107,22 @@ async def upload_resume(
     except HTTPException:
         raise
 
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        logger.exception(f"Unexpected error during resume upload: {str(e)}")
+        logger.exception("Unexpected error during resume upload")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"檔案處理失敗: {str(e)}",
+            detail="伺服器處理失敗, 請稍後再試",
         )
 
 
 @router.get("", status_code=status.HTTP_200_OK)
-async def list_resumes(db: db_dependency):
+@limiter.limit("100/minute")
+async def list_resumes(request: Request, db: db_dependency):
     result = await db.execute(select(Resume).order_by(Resume.uploaded_at.desc()))
 
     resumes = result.scalars().all()
-    
+
     return {
         "message": "查詢成功",
         "data": [
@@ -123,4 +136,3 @@ async def list_resumes(db: db_dependency):
             for resume in resumes
         ],
     }
-

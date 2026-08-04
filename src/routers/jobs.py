@@ -1,13 +1,14 @@
 from typing import Annotated
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
 from src.database import get_db
+from src.limiter import limiter
 from src.models.job import Job
 from src.services.jd_service import extract_from_url, extract_from_text
 from src.utils.time_utils import utc_now
@@ -27,7 +28,9 @@ class ParseTextRequest(BaseModel):
 
 
 @router.post("/parse-url", status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/hour")
 async def parse_jd_from_url(
+    request: Request,
     db: db_dependency,
     body: ParseUrlRequest,
 ):
@@ -82,17 +85,19 @@ async def parse_jd_from_url(
     except HTTPException:
         raise
 
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        logger.exception(f"Unexpected error during JD URL parsing: {str(e)}")
+        logger.exception("Unexpected error during JD URL parsing")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"處理失敗: {str(e)}",
+            detail="伺服器處理失敗, 請稍後再試",
         )
 
 
 @router.post("/parse-text", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/hour")
 async def parse_jd_from_text(
+    request: Request,
     db: db_dependency,
     body: ParseTextRequest,
 ):
@@ -140,17 +145,18 @@ async def parse_jd_from_text(
     except HTTPException:
         raise
 
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        logger.exception(f"Unexpected error during JD text parsing: {str(e)}")
+        logger.exception("Unexpected error during JD text parsing")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"處理失敗: {str(e)}",
+            detail="伺服器處理失敗, 請稍後再試",
         )
 
 
 @router.get("", status_code=status.HTTP_200_OK)
-async def list_jobs(db: db_dependency):
+@limiter.limit("100/minute")
+async def list_jobs(request: Request, db: db_dependency):
     result = await db.execute(select(Job).order_by(Job.created_at.desc()))
 
     jobs = result.scalars().all()

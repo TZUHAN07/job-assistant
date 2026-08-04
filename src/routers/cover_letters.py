@@ -1,7 +1,7 @@
 from typing import Annotated
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from starlette import status
 
 from src.database import get_db
+from src.limiter import limiter
 from src.models import Resume, Job, Matching, CoverLetter
 from src.schemas import ResumeParsed, JobParsed, MatchingResult
 from src.services.cover_letter_service import generate_cover_letter
@@ -29,7 +30,9 @@ class GenerateCoverLetterRequest(BaseModel):
 
 
 @router.post("/generate", status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/hour")
 async def generate(
+    request: Request,
     db: db_dependency,
     body: GenerateCoverLetterRequest,
 ):
@@ -156,17 +159,19 @@ async def generate(
     except HTTPException:
         raise
 
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        logger.exception(f"Unexpected error during cover letter generation: {str(e)}")
+        logger.exception("Unexpected error during cover letter generation")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"處理失敗: {str(e)}",
+            detail="伺服器處理失敗, 請稍後再試",
         )
 
 
 @router.get("", status_code=status.HTTP_200_OK)
+@limiter.limit("100/minute")
 async def list_by_matching(
+    request: Request,
     db: db_dependency,
     matching_id: int = Query(..., gt=0, description="Matching ID to filter"),
 ):
@@ -184,8 +189,8 @@ async def list_by_matching(
     letters = result.scalars().all()
 
     return {
-            "message": "查詢成功",
-            "data": [
+        "message": "查詢成功",
+        "data": [
             {
                 "id": letter.id,
                 "matching_id": letter.matching_id,
@@ -205,4 +210,4 @@ async def list_by_matching(
             }
             for letter in letters
         ],
-        }
+    }

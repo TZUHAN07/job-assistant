@@ -1,8 +1,13 @@
 from fastapi import FastAPI, Depends
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.database import get_db
+from src.limiter import limiter
 
 from src.routers import resume as resume_router
 from src.routers import jobs as jobs_router
@@ -15,6 +20,10 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 
 @app.get("/health")
 async def health_check(db: AsyncSession = Depends(get_db)):
@@ -22,8 +31,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     try:
         await db.execute(text("SELECT 1"))
         db_status = "connected"
-    except Exception as e:
-        db_status = f"error: {str(e)}"
+    except Exception:
+        db_status = "error"
     return {
         "status": "ok",
         "service": "job-assistant",

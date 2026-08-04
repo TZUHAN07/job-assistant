@@ -1,7 +1,7 @@
 from typing import Annotated
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from starlette import status
 
 from src.database import get_db
+from src.limiter import limiter
 from src.models import Resume, Job, Matching
 from src.schemas import ResumeParsed, JobParsed
 from src.services.matching_service import calculate_matching_score
@@ -26,7 +27,9 @@ class MatchingScoreRequest(BaseModel):
 
 
 @router.post("/score", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/hour")
 async def calculate_score(
+    request: Request,
     db: db_dependency,
     body: MatchingScoreRequest,
 ):
@@ -129,17 +132,19 @@ async def calculate_score(
     except HTTPException:
         raise
 
-    except Exception as e:
+    except Exception:
         await db.rollback()
         logger.exception("Unexpected error during matching calculation")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"處理失敗: {str(e)}",
+            detail="伺服器處理失敗, 請稍後再試",
         )
 
 
 @router.get("/{matching_id}", status_code=status.HTTP_200_OK)
+@limiter.limit("100/minute")
 async def get_matching(
+    request: Request,
     db: db_dependency,
     matching_id: int = Path(..., gt=0, title="Matching ID"),
 ):
@@ -191,9 +196,9 @@ async def get_matching(
     except HTTPException:
         raise
 
-    except Exception as e:
+    except Exception:
         logger.exception("Unexpected error during matching retrieval")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"處理失敗: {str(e)}",
+            detail="伺服器處理失敗, 請稍後再試",
         )
