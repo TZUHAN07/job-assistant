@@ -1,7 +1,7 @@
 import logging
 
 from fastapi import FastAPI, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -55,11 +55,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
 
 @app.get("/")
 async def root():
-    return {
-        "message": "job-assistant API",
-        "docs": "/docs",
-        "health": "/health",
-    }
+    return RedirectResponse(url="/app/index.html")
 
 
 app.include_router(resume_router.router)
