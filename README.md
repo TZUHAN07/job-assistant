@@ -7,13 +7,18 @@
 🌐 **Live Demo**：https://job.tzuhan.dev
 📖 **API Docs**：https://job.tzuhan.dev/docs
 
-> Portfolio project — MVP / solo demo，著重 AI application 與 backend engineering 的實作與設計思考。
-
 ---
 
 ## Demo 展示
 
-目前 Demo 不需登入即可操作。
+完整操作流程包含：
+
+* 履歷解析
+* JD 解析
+* Resume × Job AI Matching
+* Cover Letter Generation
+
+https://github.com/user-attachments/assets/1635c49d-e056-484c-a387-3dcb97085493
 
 ### 1. 履歷解析
 
@@ -153,7 +158,7 @@ Backend 使用：
 
 ---
 
-## 3. 將 Matching 設計為一級實體
+## 3. 將 Matching 設計為 Domain Entity
 
 Resume 與 Job 並不是單純的 many-to-many relationship。
 
@@ -166,7 +171,7 @@ Resume 與 Job 並不是單純的 many-to-many relationship。
 * quick wins
 * long-term goals
 
-因此將 Matching 設計為獨立的 **junction entity**：
+因此將 Matching 設計為獨立的 **domain entity**，而不是單純的 junction table：
 
 ```text
 Resume
@@ -177,7 +182,7 @@ Resume
    │
 ```
 
-這讓後續 Cover Letter generation、歷史版本與分析結果都可以建立在同一個 matching context 上。
+`Matching` 不僅保存 Resume 與 Job 的關聯，也承載兩者之間的 AI analysis 結果，讓後續 Cover Letter generation、歷史版本與分析結果都可以建立在同一個 matching context 上。
 
 ---
 
@@ -218,7 +223,7 @@ Global exception handler 用於處理 dependency layer 等 endpoint `try/except`
 
 ## 6. 成本導向的 Rate Limiting
 
-使用 `slowapi` 根據 LLM API 成本設定不同 rate limit：
+使用 `slowapi` 根據不同 endpoint 的 LLM 使用成本設定不同 rate limit：
 
 ```text
 GET endpoints
@@ -231,7 +236,7 @@ POST /cover-letters/generate
 20 / hour
 ```
 
-目的不是單純限制 request 數量，而是依照不同 endpoint 的 **LLM cost** 控制資源使用。
+根據不同 endpoint 的 LLM 使用成本設定 rate limit，降低高成本操作被大量呼叫的風險。
 
 ---
 
@@ -239,7 +244,7 @@ POST /cover-letters/generate
 
 ### XSS 防護
 
-LLM 解析結果可能包含 user-controlled content。
+LLM 解析結果與 user-controlled content 都視為 untrusted content。
 
 Frontend render 前統一透過：
 
@@ -247,7 +252,7 @@ Frontend render 前統一透過：
 escapeHtml()
 ```
 
-處理字串，避免 LLM extract 出的內容直接進入 HTML。
+處理字串，避免未經處理的內容直接插入 HTML。
 
 ### 通用錯誤回應
 
@@ -261,7 +266,7 @@ str(exception)
 
 ---
 
-## 8. Docker Production Image
+## 8. Multi-stage Docker Build
 
 使用 Docker multi-stage build：
 
@@ -414,11 +419,11 @@ erDiagram
 
 ### Schema 設計考量
 
-* `Matching` 作為 first-class entity，保存 Resume × Job 的 AI analysis。
+* `Matching` 作為 domain entity，保存 Resume × Job 的 AI analysis。
 * 使用 JSONB 保存 LLM structured output，保留 schema evolution 彈性。
 * Resume / Job parsing 支援 raw content 與 parsed data 分離。
 * 使用 FK cascade 維持 Resume → Matching → CoverLetter 的資料一致性。
-* Cover Letter version 透過 SQL aggregate 計算下一個版本。
+* Cover Letter 支援以 version 管理不同生成結果。
 
 ---
 
@@ -467,11 +472,11 @@ Render
 
 ---
 
-# 測試與驗證
+# 測試與 Production Validation
 
-目前 automated testing 尚未完成，列為 v2 roadmap。
+Automated integration testing 目前列為 v2 roadmap。
 
-現階段使用 realistic API testing 驗證 production flow：
+現階段透過 realistic API testing 與 failure simulation 驗證 production flow：
 
 ```bash
 curl https://job.tzuhan.dev/health
@@ -524,17 +529,17 @@ curl -X POST https://job.tzuhan.dev/matchings/score \
 * Streaming file upload + early size validation
 * Redis shared rate limiting
 
+## DevOps / Observability
+
+* GitHub Actions CI
+* Structured logging
+* Production monitoring
+
 ## 產品功能
 
 * Delete / Favorite endpoints
 * Cover Letter section-level editing
 * Public sharing link
-
-## DevOps
-
-* GitHub Actions CI
-* Structured logging
-* Production monitoring
 
 ---
 
