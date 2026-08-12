@@ -18,7 +18,7 @@
 * Resume × Job AI Matching
 * Cover Letter Generation
 
-https://github.com/user-attachments/assets/1635c49d-e056-484c-a387-3dcb97085493
+https://github.com/user-attachments/assets/625d376f-b7fc-4456-b4cc-1b91cb9f252a
 
 ### 1. 履歷解析
 
