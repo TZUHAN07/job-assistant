@@ -63,3 +63,8 @@ data/cached_jds/
 
 # Scratch / experimental code (not committed)
 scratch/
+
+# Data dumps for prompt eval / debug (contain PII from real resumes)
+*_letters.json
+scripts/*_output.json
+scripts/*_dump.json
