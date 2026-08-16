@@ -1,7 +1,7 @@
 from typing import Annotated
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -157,7 +157,7 @@ async def parse_jd_from_text(
 @router.get("", status_code=status.HTTP_200_OK)
 @limiter.limit("100/minute")
 async def list_jobs(request: Request, db: db_dependency):
-    result = await db.execute(select(Job).order_by(Job.created_at.desc()))
+    result = await db.execute(select(Job).order_by(Job.created_at.desc().limit(20)))
 
     jobs = result.scalars().all()
 
@@ -176,3 +176,48 @@ async def list_jobs(request: Request, db: db_dependency):
             for job in jobs
         ],
     }
+
+
+@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/hour")
+async def delete_job(
+    request: Request,
+    db: db_dependency,
+    job_id: int = Path(..., gt=0, title="Job ID"),
+):
+    """
+    Delete a job by its ID.
+
+    - FK CASCADE 自動連帶刪 matchings+ cover_letters (三層 cascade)
+    - Raises 404 if not found
+    - Returns 204 No Content on successful deletion
+    """
+
+    try:
+        job_result = await db.execute(select(Job).where(Job.id == job_id))
+
+        job_row = job_result.scalar_one_or_none()
+
+        if not job_row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job {job_id} not found",
+            )
+
+        await db.delete(job_row)
+        await db.commit()
+
+        logger.info(f"Job {job_id} deleted (with cascade matchings + cover_letters)")
+
+        return None
+
+    except HTTPException:
+        raise
+
+    except Exception:
+        await db.rollback()
+        logger.exception("Unexpected error during job deletion")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="伺服器處理失敗, 請稍後再試",
+        )
