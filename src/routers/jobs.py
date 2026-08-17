@@ -157,7 +157,8 @@ async def parse_jd_from_text(
 @router.get("", status_code=status.HTTP_200_OK)
 @limiter.limit("100/minute")
 async def list_jobs(request: Request, db: db_dependency):
-    result = await db.execute(select(Job).order_by(Job.created_at.desc().limit(20)))
+    result = await db.execute(select(Job).order_by(Job.created_at.desc()).limit(20)
+    )
 
     jobs = result.scalars().all()
 

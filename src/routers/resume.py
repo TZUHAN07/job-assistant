@@ -120,7 +120,7 @@ async def upload_resume(
 @limiter.limit("100/minute")
 async def list_resumes(request: Request, db: db_dependency):
     result = await db.execute(
-        select(Resume).order_by(Resume.uploaded_at.desc().limit(20))
+        select(Resume).order_by(Resume.uploaded_at.desc()).limit(20)
     )
 
     resumes = result.scalars().all()
