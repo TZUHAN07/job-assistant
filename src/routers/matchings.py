@@ -202,3 +202,49 @@ async def get_matching(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="伺服器處理失敗, 請稍後再試",
         )
+
+
+@router.delete("/{matching_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/hour")
+async def delete_matching(
+    request: Request,
+    db: db_dependency,
+    matching_id: int = Path(..., gt=0, title="Matching ID"),
+):
+    """
+    Delete a Matching record by ID.
+
+    - FK CASCADE 自動連帶刪 cover_letters
+    - Raises 404 if not found
+    - Returns 204 No Content on successful deletion
+    """
+
+    try:
+        matching_result = await db.execute(
+            select(Matching).where(Matching.id == matching_id)
+        )
+        matching_row = matching_result.scalar_one_or_none()
+
+        if not matching_row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Matching {matching_id} not found",
+            )
+
+        await db.delete(matching_row)
+        await db.commit()
+
+        logger.info(f"Matching {matching_id} deleted (with cascade cover_letters)")
+
+        return None
+
+    except HTTPException:
+        raise
+
+    except Exception:
+        await db.rollback()
+        logger.exception("Unexpected error during matching deletion")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="伺服器處理失敗, 請稍後再試",
+        )

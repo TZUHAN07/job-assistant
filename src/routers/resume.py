@@ -1,7 +1,7 @@
 from io import BytesIO
 from typing import Annotated
 
-from fastapi import File, UploadFile, APIRouter, Depends, HTTPException, Request
+from fastapi import File, UploadFile, APIRouter, Depends, HTTPException, Path, Request
 from pypdf import PdfReader
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -119,7 +119,9 @@ async def upload_resume(
 @router.get("", status_code=status.HTTP_200_OK)
 @limiter.limit("100/minute")
 async def list_resumes(request: Request, db: db_dependency):
-    result = await db.execute(select(Resume).order_by(Resume.uploaded_at.desc()))
+    result = await db.execute(
+        select(Resume).order_by(Resume.uploaded_at.desc()).limit(20)
+    )
 
     resumes = result.scalars().all()
 
@@ -131,8 +133,54 @@ async def list_resumes(request: Request, db: db_dependency):
                 "filename": resume.filename,
                 "uploaded_at": resume.uploaded_at,
                 "processed_at": resume.processed_at,
-                "resume_name": (resume.parsed_data or {}).get("name") or resume.filename,
+                "resume_name": (resume.parsed_data or {}).get("name")
+                or resume.filename,
             }
             for resume in resumes
         ],
     }
+
+
+@router.delete("/{resume_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/hour")
+async def delete_resume(
+    request: Request,
+    db: db_dependency,
+    resume_id: int = Path(..., gt=0, title="Resume ID"),
+):
+    """
+    Delete a resume by its ID.
+
+    - FK CASCADE 自動連帶刪 matchings + cover_letters (三層 cascade)
+    - Raises 404 if not found
+    - Returns 204 No Content on successful deletion
+    """
+
+    try:
+        resume_result = await db.execute(select(Resume).where(Resume.id == resume_id))
+        resume_row = resume_result.scalar_one_or_none()
+
+        if not resume_row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Resume {resume_id} not found",
+            )
+
+        await db.delete(resume_row)
+        await db.commit()
+
+        logger.info(
+            f"Resume {resume_id} deleted (with cascade matchings + cover_letters)"
+        )
+        return None
+
+    except HTTPException:
+        raise
+
+    except Exception:
+        await db.rollback()
+        logger.exception("Unexpected error during resume deletion")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="伺服器處理失敗, 請稍後再試",
+        )
