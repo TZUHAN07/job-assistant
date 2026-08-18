@@ -1,6 +1,7 @@
 let allResumes = [];
 let allJobs = [];
 let currentJobTab = "url";
+let jobSearchQuery = "";
 
 (async function main() {
   await loadAll();
@@ -174,8 +175,36 @@ async function handleResumeUpload(file) {
 
 function renderJobSection() {
   const el = document.getElementById("section-job");
+  if (!el) return;
+
+  const trimmedQuery = jobSearchQuery.trim().toLocaleLowerCase();
+
+  const filteredJobs = trimmedQuery
+    ? allJobs.filter(
+        (j) =>
+          (j.job_title || "").toLocaleLowerCase().includes(trimmedQuery) ||
+          (j.job_company || "").toLocaleLowerCase().includes(trimmedQuery),
+      )
+    : allJobs;
+
   el.innerHTML = `
-    <h2 class="text-lg font-bold text-gray-800 mb-4">職缺管理</h2>
+  <div class="flex justify-between items-center mb-4">
+    <h2 class="text-lg font-bold text-gray-800">職缺管理</h2>
+    <span class="text-xs font-semibold bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full">
+        共 ${allJobs.length} 筆 ${trimmedQuery ? `(篩選出 ${filteredJobs.length} 筆)` : ""}
+      </span>
+    </div>
+
+    <div class="mb-4">
+      <input
+        type="text"
+        id="job-search-input"
+        value="${escapeHtml(jobSearchQuery)}"
+        placeholder="搜尋職缺名稱或公司名稱..."
+        class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition shadow-sm"
+      />
+    </div>
+
     <div class="flex gap-2 mb-4 border-b border-gray-200">
       <button class="job-tab px-4 py-2 text-sm font-medium border-b-2 transition ${
         currentJobTab === "url"
@@ -202,25 +231,27 @@ function renderJobSection() {
           <button id="job-url-submit" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-lg">
             抓取 JD
           </button>
-          <p class="text-xs text-gray-400 mt-2">Firecrawl scrape → AI 解析 (約 15 秒)</p>
+          <p class="text-xs text-gray-400 mt-2"> AI 解析 (約 15 秒)</p>
         </div>
       `
        : `
-        <div class="mb-6">
+        <div class="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-100">
+        <label class="block text-xs font-medium text-gray-600 mb-1">貼上 JD 內文</label>
           <textarea id="job-text-input" rows="6" placeholder="直接貼上完整 JD 內容 (至少 50 字)..."
                     class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 mb-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
           <button id="job-text-submit" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-lg">
             解析 JD
           </button>
-          <p class="text-xs text-gray-400 mt-2">若 URL 抓不到 (anti-bot), 用 text 貼上 fallback</p>
+          <p class="text-xs text-gray-400 mt-2"> AI 解析 (約 15 秒)</p>
         </div>
       `
    }
 
+
     <div class="space-y-2 max-h-60 overflow-y-auto pr-1">
       ${
-        allJobs.length > 0
-          ? allJobs
+        filteredJobs.length > 0
+          ? filteredJobs
               .map(
                 (j) => `
               <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
@@ -255,6 +286,23 @@ function renderJobSection() {
   `;
   setupJobHandlers();
   setupJobDeleteHandlers();
+
+  const searchInput = document.getElementById("job-search-input");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      jobSearchQuery = e.target.value;
+      renderJobSection();
+
+      const newSearchInput = document.getElementById("job-search-input");
+      if (newSearchInput) {
+        newSearchInput.focus();
+        newSearchInput.setSelectionRange(
+          jobSearchQuery.length,
+          jobSearchQuery.length,
+        );
+      }
+    });
+  }
 }
 
 function setupJobHandlers() {
