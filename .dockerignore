@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Env / secrets (must NOT bundle to image)
+.env
+.env.*
+!.env.example
+
+# Git / IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# Local dev / docs
+README.md
+docs/
+notes/
+tests/
+
+# Local Postgres / Docker
+docker-compose.yml
+*.dump
+*.sql
+
+# Build artifacts
+*.egg-info/
+dist/
+build/

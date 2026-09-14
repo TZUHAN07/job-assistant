@@ -1,4 +1,23 @@
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, Depends, Request
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.database import get_db
+from src.limiter import limiter
+
+from src.routers import resume as resume_router
+from src.routers import jobs as jobs_router
+from src.routers import matchings as matchings_router
+from src.routers import cover_letters as cover_letters_router
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="job-assistant",
@@ -6,17 +25,48 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception(f"Unhandled exception on {request.method} {request.url.path}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "伺服器處理失敗, 請稍後再試"},
+    )
+
 
 @app.get("/health")
-async def health_check():
+async def health_check(db: AsyncSession = Depends(get_db)):
     """Health check endpoint for uptime monitoring."""
-    return {"status": "ok", "service": "job-assistant"}
+    try:
+        await db.execute(text("SELECT 1"))
+        db_status = "connected"
+    except Exception:
+        db_status = "error"
+    return {
+        "status": "ok",
+        "service": "job-assistant",
+        "db_status": db_status,
+    }
 
 
 @app.get("/")
 async def root():
-    return {
-        "message": "job-assistant API",
-        "docs": "/docs",
-        "health": "/health",
-    }
+    return RedirectResponse(url="/app/index.html")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return RedirectResponse(url="/app/job-icon.svg")
+
+app.include_router(resume_router.router)
+app.include_router(jobs_router.router)
+app.include_router(matchings_router.router)
+app.include_router(cover_letters_router.router)
+
+
+app.mount("/app", StaticFiles(directory="static", html=True), name="static")
