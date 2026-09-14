@@ -29,6 +29,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.exception(f"Unhandled exception on {request.method} {request.url.path}")
@@ -57,6 +58,10 @@ async def health_check(db: AsyncSession = Depends(get_db)):
 async def root():
     return RedirectResponse(url="/app/index.html")
 
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return RedirectResponse(url="/app/job-icon.svg")
 
 app.include_router(resume_router.router)
 app.include_router(jobs_router.router)
