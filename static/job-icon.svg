@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <rect width="512" height="512" rx="112" fill="#6366F1"/>
+  <!-- Briefcase Frame -->
+  <path d="M160 170 C160 145, 180 128, 205 128 L307 128 C332 128, 352 145, 352 170 L352 184 L160 184 Z" fill="none" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+  <rect x="112" y="184" width="288" height="200" rx="28" fill="none" stroke="#FFFFFF" stroke-width="28"/>
+  <!-- AI Sparkle Icon inside Briefcase -->
+  <path d="M256 216 C256 250, 270 264, 304 264 C270 264, 256 278, 256 312 C256 278, 242 264, 208 264 C242 264, 256 250, 256 216 Z" fill="#EEF2FF"/>
+  <path d="M328 304 C328 320, 334 326, 350 326 C334 326, 328 332, 328 348 C328 332, 322 326, 306 326 C322 326, 328 320, 328 304 Z" fill="#EEF2FF"/>
+</svg>
