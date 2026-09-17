@@ -1,8 +1,10 @@
 import logging
+import re
 from typing import Optional
 
 import instructor
 from dotenv import load_dotenv
+from fastapi import HTTPException
 from instructor.core.exceptions import InstructorRetryException
 
 from src.schemas import (
@@ -23,6 +25,33 @@ llm_client = instructor.from_provider(
     async_client=True,
 )
 
+def parse_quota_error(error_message: str) -> str:
+    """根據 429 錯誤訊息內容，回傳對使用者更準確的提示文字"""
+
+    error_lower = error_message.lower()
+
+    daily_quota_patterns = (
+        "perday",
+        "per day",
+        "per_day",
+        "daily quota",
+        "perday quota",
+    )
+
+    if any(pattern in error_lower for pattern in daily_quota_patterns):
+        return "AI 服務今日額度已用完，請明天再試"
+
+    retry_match = re.search(
+        r'retryDelay:\s*"(\d+)s"',
+        error_message,
+        re.IGNORECASE,
+    )
+
+    if retry_match:
+        seconds = retry_match.group(1)
+        return f"AI 服務目前請求過於頻繁，請約 {seconds} 秒後再試"
+    
+    return "AI 服務目前請求量較大，請稍後再試"
 
 SYSTEM_INSTRUCTION = """
 你是熟悉台灣求職市場與各產業招募標準的專業求職信顧問。
@@ -744,7 +773,7 @@ Matched Skills: {matching.matched_skills}
                 },
             ],
             temperature=0.4,
-            max_retries=3,
+            max_retries=1,
         )
 
         logger.info(
@@ -755,7 +784,20 @@ Matched Skills: {matching.matched_skills}
 
         return result
 
-    except InstructorRetryException:
+    except InstructorRetryException  as e:
+        error_str = str(e)
+
+        if "RESOURCE_EXHAUSTED" in error_str or "429" in error_str:
+            logger.warning(
+                "API quota exceeded for cover letter generation"
+            )
+
+            user_message = parse_quota_error(error_str)
+                
+            raise HTTPException(
+                status_code=429,
+                detail=user_message
+            )
         logger.exception(
             "Instructor retry exhausted for cover letter generation"
         )
