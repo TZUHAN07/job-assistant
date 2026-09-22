@@ -25,6 +25,7 @@ async function loadVersions() {
 
     allVersions = lettersRes.data;
     matchingInfo = matchingRes.data;
+
     currentIdx = 0;
 
     renderHeader();
@@ -86,7 +87,7 @@ function attachEventListeners() {
 async function handleRegenerate() {
   const toneEl = document.getElementById("tone-select");
   const langEl = document.getElementById("language-select");
-  const tone = toneEl?.value || "professional";
+  const tone = toneEl?.value || "formal";
   const language = langEl?.value || "zh-TW";
 
   const contentEl = document.getElementById("content");
@@ -119,19 +120,55 @@ function renderHeader() {
     ? `${matchingInfo.job_company || ""} · ${matchingInfo.job_title || ""}`
     : "";
 
-  headerEl.innerHTML = `
-   <div class="flex items-center justify-between py-4 border-b border-gray-200">
-      <div class="flex items-center gap-4">
-        <a href="matching.html?id=${matchingId}" 
-           class="inline-flex items-center text-sm font-medium text-gray-500 hover:text-indigo-600 transition">
-          ← 返回匹配分析
-        </a>
-        <h1 class="text-xl font-bold text-gray-800">求職信工作室</h1>
-      </div>
-      ${jobInfo ? `<div class="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1 rounded-full">${jobInfo}</div>` : ""}
-    </div>
+   headerEl.innerHTML = `
+    <div class="py-4 border-b border-gray-200">
 
-   `;
+      <div class="flex items-center justify-between gap-4">
+        <div class="flex items-center gap-4">
+          <h1 class="text-xl font-bold text-gray-800">
+            求職信工作室
+          </h1>
+        </div>
+
+        ${
+          jobInfo
+            ? `
+              <div class="text-sm font-medium text-gray-600
+                          bg-gray-100 px-3 py-1 rounded-full">
+                ${jobInfo}
+              </div>
+            `
+            : ""
+        }
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3 mt-4">
+
+        <a
+          href="matching.html?id=${encodeURIComponent(matchingId)}"
+          class="inline-flex items-center gap-2
+                 px-4 py-2 rounded-lg
+                 text-sm font-medium
+                 text-indigo-700 bg-indigo-50
+                 hover:bg-indigo-100 transition"
+        >
+          ← 回看匹配結果
+        </a>
+
+        <a
+          href="index.html"
+          class="inline-flex items-center gap-2
+                 px-4 py-2 rounded-lg
+                 text-sm font-medium
+                 text-gray-700 bg-gray-100
+                 hover:bg-gray-200 transition"
+        >
+          ＋ 選擇其他 JD
+        </a>
+
+      </div>
+    </div>
+  `;
 }
 
 function renderVersionTabs() {
