@@ -1,0 +1,16 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: jobassistant_test
+      POSTGRES_PASSWORD: test_only_password
+      POSTGRES_DB: job_assistant_test
+    ports:
+      - "127.0.0.1:5434:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobassistant_test -d job_assistant_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
