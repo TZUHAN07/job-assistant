@@ -124,3 +124,94 @@ async def test_create_application_cover_letter_from_other_matching(client, seed_
     assert response.status_code == 404
     assert "not found for this matching" in response.json()["detail"]
     assert (await db_session.execute(select(Application))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_list_applications_empty(client):
+    response = await client.get("/applications")
+    assert response.status_code == 200
+    assert response.json() == {
+        "message": "查詢成功", "data": [], "total": 0, "limit": 20, "offset": 0,
+    }
+
+
+@pytest.mark.parametrize("with_letter", [True, False])
+@pytest.mark.asyncio
+async def test_list_applications_details(client, seed_data, db_session, with_letter):
+    from datetime import datetime, timezone
+
+    selected = seed_data["cover_letter"]
+    row = Application(
+        matching_id=seed_data["matching"].id,
+        resume_id=seed_data["resume"].id,
+        job_id=seed_data["job"].id,
+        cover_letter_id=selected.id if with_letter else None,
+        status="applied", notes="follow up next week",
+        applied_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+    )
+    db_session.add_all([row, CoverLetter(
+        matching_id=seed_data["matching"].id,
+        title="Newer version", content="new text", version=2,
+    )])
+    await db_session.commit()
+    expected_id = row.id
+    db_session.expunge_all()
+
+    response = await client.get("/applications")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    item = body["data"][0]
+    assert item["id"] == expected_id
+    assert item["company"] == "Tech Co"
+    assert item["job_title"] == "Backend Engineer"
+    assert item["resume_filename"] == "resume.pdf"
+    assert item["score"] == 85
+    assert item["status"] == "applied"
+    assert item["notes"] == "follow up next week"
+    assert item["applied_at"].startswith("2026-10-01T00:00:00")
+    assert item["cover_letter_id"] == (selected.id if with_letter else None)
+    assert item["cover_letter_version"] == (1 if with_letter else None)
+    assert item["cover_letter_title"] == ("Cover Letter 1" if with_letter else None)
+
+
+@pytest.mark.asyncio
+async def test_list_applications_pagination_and_missing_data(client, seed_data, db_session):
+    from datetime import datetime, timezone
+
+    seed_data["job"].parsed_data = None
+    seed_data["matching"].score = None
+    rows = [Application(
+        matching_id=seed_data["matching"].id,
+        resume_id=seed_data["resume"].id,
+        job_id=seed_data["job"].id,
+        user_id=owner,
+        created_at=datetime(2026, 10, day, tzinfo=timezone.utc),
+    ) for day, owner in [(1, 1), (2, 1), (3, 1), (4, 2)]]
+    db_session.add_all(rows)
+    await db_session.commit()
+    expected_ids = [row.id for row in rows[:3]][::-1]
+    db_session.expunge_all()
+
+    response = await client.get("/applications?limit=2&offset=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 3
+    assert body["limit"] == 2
+    assert body["offset"] == 1
+    assert [item["id"] for item in body["data"]] == expected_ids[1:]
+    assert body["data"][0]["company"] == ""
+    assert body["data"][0]["job_title"] == ""
+    assert body["data"][0]["score"] is None
+    beyond = await client.get("/applications?offset=99")
+    assert beyond.json()["data"] == []
+    assert beyond.json()["total"] == 3
+
+
+@pytest.mark.parametrize("query", ["limit=0", "limit=101", "offset=-1", "limit=abc"])
+@pytest.mark.asyncio
+async def test_list_applications_invalid_pagination(client, query):
+    response = await client.get(f"/applications?{query}")
+    assert response.status_code == 422

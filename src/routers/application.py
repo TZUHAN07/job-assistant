@@ -1,15 +1,16 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
 from src.database import get_db
 from src.limiter import limiter
 from src.models import Application, CoverLetter, Matching
-from src.schemas.application import ApplicationCreate
+from src.schemas.application import ApplicationCreate, ApplicationListResponse
 
 router = APIRouter(prefix="/applications", tags=["Application"])
 logger = logging.getLogger(__name__)
@@ -104,6 +105,63 @@ async def create_application(
     except Exception:
         await db.rollback()
         logger.exception("Unexpected error during application creation")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="伺服器處理失敗, 請稍後再試",
+        )
+
+
+@router.get("", response_model=ApplicationListResponse)
+@limiter.limit("100/minute")
+async def list_applications(
+    request: Request,
+    db: db_dependency,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+):
+    """List tracking records with their selected cover letter version, newest first."""
+    try:
+        owner = Application.user_id == 1
+        total = await db.scalar(select(func.count(Application.id)).where(owner))
+        result = await db.execute(
+            select(Application)
+            .where(owner)
+            .options(
+                selectinload(Application.resume),
+                selectinload(Application.job),
+                selectinload(Application.matching),
+                selectinload(Application.cover_letter),
+            )
+            .order_by(Application.created_at.desc(), Application.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        data = []
+        for row in result.scalars():
+            job_data = row.job.parsed_data or {}
+            letter = row.cover_letter
+            data.append({
+                "id": row.id,
+                "matching_id": row.matching_id,
+                "resume_id": row.resume_id,
+                "job_id": row.job_id,
+                "cover_letter_id": row.cover_letter_id,
+                "status": row.status,
+                "applied_at": row.applied_at,
+                "notes": row.notes,
+                "created_at": row.created_at,
+                "updated_at": row.updated_at,
+                "resume_filename": row.resume.filename,
+                "company": job_data.get("company") or "",
+                "job_title": job_data.get("title") or "",
+                "score": row.matching.score,
+                "cover_letter_version": letter.version if letter else None,
+                "cover_letter_title": letter.title if letter else None,
+            })
+        return {"message": "查詢成功", "data": data, "total": total,
+                "limit": limit, "offset": offset}
+    except Exception:
+        logger.exception("Unexpected error during application listing")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="伺服器處理失敗, 請稍後再試",
