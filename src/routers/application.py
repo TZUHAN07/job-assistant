@@ -1,7 +1,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +10,10 @@ from starlette import status
 from src.database import get_db
 from src.limiter import limiter
 from src.models import Application, CoverLetter, Matching
-from src.schemas.application import ApplicationCreate, ApplicationListResponse
+from src.schemas.application import (
+    ApplicationCreate, ApplicationListResponse, ApplicationUpdate,
+    ApplicationRecord, ApplicationUpdateResponse,
+)
 
 router = APIRouter(prefix="/applications", tags=["Application"])
 logger = logging.getLogger(__name__)
@@ -166,3 +169,39 @@ async def list_applications(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="伺服器處理失敗, 請稍後再試",
         )
+
+
+@router.patch("/{application_id}", response_model=ApplicationUpdateResponse)
+@limiter.limit("30/hour")
+async def update_application(
+    request: Request,
+    db: db_dependency,
+    application_id: Annotated[int, Path(gt=0)],
+    body: ApplicationUpdate,
+):
+    """更新狀態、投遞時間與備註。未傳欄位保留；時間與備註可用 null 清空。
+
+    狀態不會自動改寫投遞時間；applied_at 需提供含時區的時間。
+    """
+    try:
+        result = await db.execute(
+            select(Application).where(
+                Application.id == application_id,
+                Application.user_id == 1,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="求職紀錄不存在")
+
+        for field, value in body.model_dump(exclude_unset=True).items():
+            setattr(row, field, value)
+        await db.commit()
+        await db.refresh(row)
+        return {"message": "求職追蹤更新成功", "data": ApplicationRecord.model_validate(row)}
+    except HTTPException:
+        raise
+    except Exception:
+        await db.rollback()
+        logger.exception("Unexpected error during application update")
+        raise HTTPException(status_code=500, detail="伺服器處理失敗, 請稍後再試")
