@@ -1,7 +1,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -204,4 +204,37 @@ async def update_application(
     except Exception:
         await db.rollback()
         logger.exception("Unexpected error during application update")
+        raise HTTPException(status_code=500, detail="伺服器處理失敗, 請稍後再試")
+
+
+@router.delete("/{application_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/hour")
+async def delete_application(
+    request: Request,
+    db: db_dependency,
+    application_id: Annotated[int, Path(gt=0)],
+):
+    """刪除求職追蹤紀錄，保留履歷、職缺、匹配結果與求職信。"""
+    try:
+        result = await db.execute(
+            select(Application).where(
+                Application.id == application_id,
+                Application.user_id == 1,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="求職紀錄不存在")
+
+        await db.delete(row)
+        await db.commit()
+
+        logger.info(f"Application {application_id} deleted")
+        
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except HTTPException:
+        raise
+    except Exception:
+        await db.rollback()
+        logger.exception("Unexpected error during application deletion")
         raise HTTPException(status_code=500, detail="伺服器處理失敗, 請稍後再試")
