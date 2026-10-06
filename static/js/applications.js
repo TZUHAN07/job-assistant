@@ -40,6 +40,7 @@ function renderApplication(row) {
     <td class="p-4 text-sm whitespace-nowrap"><button type="button" data-edit-id="${escapeHtml(row.id)}" data-edit-field="applied_at" class="text-indigo-700 border border-indigo-100 rounded-lg px-3 py-2 hover:bg-indigo-50 focus:ring-2 focus:ring-indigo-500" aria-label="編輯紀錄 ${escapeHtml(row.id)} 的投遞日期">${row.applied_at ? escapeHtml(formatAppliedAt(row.applied_at)) + " ✎" : "+ 填寫日期"}</button></td>
     <td class="p-4 text-sm max-w-xs break-words">${escapeHtml(row.resume_filename || "未提供履歷名稱")}</td>
     <td class="p-4 min-w-[180px] max-w-xs"><p class="text-sm whitespace-pre-wrap break-words">${escapeHtml(row.notes || "尚無備註")}</p><button type="button" data-edit-id="${escapeHtml(row.id)}" data-edit-field="notes" title="編輯備註" class="mt-2 text-indigo-700 border border-indigo-100 rounded-lg px-3 py-2 text-sm hover:bg-indigo-50 focus:ring-2 focus:ring-indigo-500" aria-label="編輯紀錄 ${escapeHtml(row.id)} 的備註"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg></button></td>
+    <td class="p-4"><button type="button" data-delete-id="${escapeHtml(row.id)}" title="刪除追蹤紀錄" aria-label="刪除追蹤紀錄 ${escapeHtml(row.id)}" class="text-gray-400 hover:text-red-600 hover:bg-red-50 border rounded-lg p-3 focus:ring-2 focus:ring-red-500"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button></td>
   </tr>`;
 }
 
@@ -66,7 +67,7 @@ async function loadApplications(offset = currentOffset) {
       content.innerHTML = `<div class="p-10 text-center"><h2 class="text-lg font-semibold">尚無求職追蹤紀錄</h2><p class="text-gray-500 mt-2">建立紀錄後，就能在這裡查看匹配度與投遞進度。</p><a href="index.html" class="inline-block mt-5 text-indigo-600 hover:underline">返回首頁查看履歷與職缺</a></div>`;
       return;
     }
-    content.innerHTML = `<div class="overflow-x-auto" role="region" aria-label="求職紀錄表格，可左右捲動" tabindex="0"><table class="w-full min-w-[850px] text-left"><caption class="sr-only">求職追蹤紀錄，投遞日期以台北時區顯示</caption><thead class="bg-gray-50 text-sm text-gray-500"><tr>${["職缺／公司", "匹配度", "投遞狀態", "求職信版本", "投遞日期", "使用履歷", "備註"].map(text => `<th scope="col" class="p-4 font-medium">${text}</th>`).join("")}</tr></thead><tbody>${result.data.map(renderApplication).join("")}</tbody></table></div>`;
+    content.innerHTML = `<div class="overflow-x-auto" role="region" aria-label="求職紀錄表格，可左右捲動" tabindex="0"><table class="w-full min-w-[850px] text-left"><caption class="sr-only">求職追蹤紀錄，投遞日期以台北時區顯示</caption><thead class="bg-gray-50 text-sm text-gray-500"><tr>${["職缺／公司", "匹配度", "投遞狀態", "求職信版本", "投遞日期", "使用履歷", "備註", "操作"].map(text => `<th scope="col" class="p-4 font-medium">${text}</th>`).join("")}</tr></thead><tbody>${result.data.map(renderApplication).join("")}</tbody></table></div>`;
     pagination.hidden = false;
     document.getElementById("page-info").textContent = `第 ${Math.floor(offset / PAGE_SIZE) + 1} / ${Math.ceil(result.total / PAGE_SIZE)} 頁 · 顯示 ${offset + 1}–${offset + result.data.length} 筆`;
     previousButton.disabled = offset === 0;
@@ -221,6 +222,71 @@ content.addEventListener("change", async event => {
     isSaving = false;
     select.disabled = false;
     buttons.forEach((button, index) => { button.disabled = disabledStates[index]; });
+  }
+});
+
+const deleteDialog = document.getElementById("delete-dialog");
+const deleteForm = document.getElementById("delete-form");
+const deleteCancel = document.getElementById("delete-cancel");
+const deleteConfirm = document.getElementById("delete-confirm");
+const deleteError = document.getElementById("delete-error");
+let deleting = null;
+let deleteTrigger = null;
+
+content.addEventListener("click", event => {
+  const button = event.target.closest("button[data-delete-id]");
+  if (!button || isLoading || isSaving) return;
+  const row = applications.find(item => String(item.id) === button.dataset.deleteId);
+  if (!row) return;
+  deleting = row;
+  deleteTrigger = button;
+  document.getElementById("delete-context").textContent =
+    `紀錄 #${row.id} · ${row.company || "未提供公司"} · ${row.job_title || "未提供職稱"}`;
+  deleteError.textContent = "";
+  deleteDialog.showModal();
+  deleteCancel.focus();
+});
+
+deleteCancel.addEventListener("click", () => {
+  if (!isSaving) deleteDialog.close();
+});
+deleteDialog.addEventListener("cancel", event => {
+  if (isSaving) event.preventDefault();
+});
+deleteDialog.addEventListener("close", () => {
+  deleting = null;
+  if (deleteTrigger?.isConnected) deleteTrigger.focus();
+});
+
+deleteForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!deleting || isSaving) return;
+  isSaving = true;
+  deleteError.textContent = "";
+  deleteForm.setAttribute("aria-busy", "true");
+  deleteCancel.disabled = true;
+  deleteConfirm.disabled = true;
+  deleteConfirm.textContent = "刪除中…";
+  try {
+    // 204 沒有 JSON body；只判斷 HTTP 狀態，不解析成功回應。
+    const response = await fetch(`${API_BASE}/applications/${deleting.id}`, {method: "DELETE"});
+    if (!response.ok && response.status !== 404) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(typeof error.detail === "string" ? error.detail : `HTTP ${response.status}`);
+    }
+    deleteDialog.close();
+    showToast(response.status === 404 ? "這筆紀錄已不存在，已重新整理列表" : "求職追蹤已刪除", response.status === 404 ? "info" : "success");
+    // 沿用列表的 offset 修正，當頁最後一筆刪除後會回到有效頁面。
+    await loadApplications();
+    reloadButton.focus();
+  } catch (error) {
+    deleteError.textContent = `刪除失敗：${error.message}`;
+  } finally {
+    isSaving = false;
+    deleteForm.setAttribute("aria-busy", "false");
+    deleteCancel.disabled = false;
+    deleteConfirm.disabled = false;
+    deleteConfirm.textContent = "刪除紀錄";
   }
 });
 

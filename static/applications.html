@@ -39,6 +39,18 @@
       <div class="flex justify-end gap-3 mt-5"><button id="edit-cancel" type="button" class="border rounded-lg px-4 py-2 disabled:opacity-50">取消</button><button id="edit-save" type="submit" class="bg-indigo-600 text-white rounded-lg px-4 py-2 disabled:opacity-50">儲存</button></div>
     </form>
   </dialog>
+  <dialog id="delete-dialog" aria-labelledby="delete-title" aria-describedby="delete-description" class="rounded-xl p-0 w-full max-w-md backdrop:bg-black/40">
+    <form id="delete-form" class="p-6">
+      <h2 id="delete-title" class="text-xl font-bold">刪除這筆求職紀錄？</h2>
+      <p id="delete-context" class="mt-3 text-sm break-words"></p>
+      <p id="delete-description" class="mt-3 text-sm text-gray-500">刪除後無法復原，不會刪除你的履歷與求職信。</p>
+      <p id="delete-error" role="alert" class="mt-3 text-sm text-red-700"></p>
+      <div class="flex justify-end gap-3 mt-5">
+        <button id="delete-cancel" type="button" class="border rounded-lg px-4 py-2 disabled:opacity-50">取消</button>
+        <button id="delete-confirm" type="submit" class="bg-red-600 hover:bg-red-700 text-white rounded-lg px-4 py-2 disabled:opacity-50">刪除紀錄</button>
+      </div>
+    </form>
+  </dialog>
   <script src="js/common.js"></script>
   <script src="js/applications.js"></script>
 </body>
