@@ -135,3 +135,51 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
+
+// 只記住本次頁面已建立的紀錄，避免成功後再次點擊；跨頁防重需由後端處理。
+const createdTrackingKeys = new Set();
+
+function renderTrackingEntry(matchingId, letterId = null, version = null) {
+  const created = createdTrackingKeys.has(`${matchingId}:${letterId}`);
+  return `<div class="shrink-0 sm:text-right" aria-label="加入求職追蹤">
+    <div class="flex flex-wrap items-center gap-3 sm:justify-end">
+      <span class="text-xs text-gray-500">${letterId === null ? "未選用求職信" : `使用 v${escapeHtml(version)}`}</span>
+      <button id="add-tracking" type="button" ${created ? "disabled" : ""} class="inline-flex items-center justify-center rounded-lg border border-indigo-200 bg-white px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-default">${created ? "✓ 已加入追蹤" : "＋ 加入追蹤"}</button>
+    </div>
+    <p id="tracking-feedback" role="status" class="text-xs text-gray-600 mt-2 max-w-sm empty:hidden"></p>
+  </div>`;
+}
+
+function bindTrackingEntry(matchingId, letterId = null, options = {}) {
+  const button = document.getElementById("add-tracking");
+  const feedback = document.getElementById("tracking-feedback");
+  const key = `${matchingId}:${letterId}`;
+  let pending = false;
+  button.addEventListener("click", async () => {
+    if (pending || createdTrackingKeys.has(key)) return;
+    const reason = options.blockReason?.();
+    if (reason) { feedback.textContent = reason; return; }
+    pending = true;
+    button.disabled = true;
+    button.textContent = "建立中…";
+    feedback.textContent = "";
+    options.setBusy?.(true);
+    try {
+      // 履歷與職缺由後端依 matching 查出，不另外由前端傳入。
+      const result = await apiCall("/applications", {
+        method: "POST",
+        body: JSON.stringify({matching_id: Number(matchingId), cover_letter_id: letterId}),
+      });
+      createdTrackingKeys.add(key);
+      feedback.textContent = `已建立追蹤紀錄 #${result.data.id}，狀態為準備中。`;
+    } catch (error) {
+      feedback.textContent = `無法確認是否建立成功：${error.message}。請先查看求職追蹤，再決定是否重試。`;
+    } finally {
+      pending = false;
+      options.setBusy?.(false);
+      const created = createdTrackingKeys.has(key);
+      button.disabled = created;
+      button.textContent = created ? "✓ 已加入追蹤" : "＋ 加入追蹤";
+    }
+  });
+}

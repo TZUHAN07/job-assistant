@@ -89,14 +89,31 @@ function renderFullPage() {
     : {content: current.content};
   originalDraft = JSON.stringify(draft);
   contentEl.innerHTML = `
-    <p class="mb-3 font-semibold">目前查看：v${escapeHtml(current.version)}${String(current.id) === getQueryParam("cover_letter_id") ? " · 此連結指定的版本" : ""}</p>
-    <p class="text-sm text-gray-500 mb-4">修改後請儲存為新版本；不會變更追蹤紀錄選用的求職信。</p>
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+      <h2 class="text-lg font-semibold text-gray-800">目前版本 <span class="ml-1 text-indigo-700">v${escapeHtml(current.version)}</span></h2>
+      ${renderTrackingEntry(matchingId, current.id, current.version)}
+    </div>
     ${renderVersionTabs()}
     ${renderControlPanel(current)}
     ${renderSplitView(current)}
   `;
 
   attachEventListeners();
+  let lockedControls = [];
+  bindTrackingEntry(matchingId, current.id, {
+    blockReason: () => isSaving ? "正在處理，請稍候。" : isDirty() ? "請先將修改儲存為新版本，再使用該版本加入追蹤。" : "",
+    setBusy: busy => {
+      isSaving = busy;
+      if (busy) {
+        lockedControls = [...contentEl.querySelectorAll("button, textarea, select")]
+          .filter(el => el.id !== "add-tracking")
+          .map(el => [el, el.disabled]);
+        lockedControls.forEach(([el]) => { el.disabled = true; });
+      } else {
+        lockedControls.forEach(([el, disabled]) => { el.disabled = disabled; });
+      }
+    },
+  });
   contentEl.querySelectorAll("textarea[data-field]").forEach(input => {
     input.addEventListener("input", () => {
       if (draft.sections) draft.sections[input.dataset.field] = input.value;
@@ -169,54 +186,16 @@ function renderHeader() {
 
    headerEl.innerHTML = `
     <div class="py-4 border-b border-gray-200">
-
       <div class="flex items-center justify-between gap-4">
-        <div class="flex items-center gap-4">
-          <h1 class="text-xl font-bold text-gray-800">
-            求職信工作室
-          </h1>
-        </div>
-
-        ${
-          jobInfo
-            ? `
-              <div class="text-sm font-medium text-gray-600
-                          bg-gray-100 px-3 py-1 rounded-full">
-                ${escapeHtml(jobInfo)}
-              </div>
-            `
-            : ""
-        }
+        <h1 class="text-2xl font-bold text-gray-800">求職信工作室</h1>
+        <a href="applications.html" class="shrink-0 text-sm text-gray-500 hover:text-indigo-700 hover:underline rounded focus:ring-2 focus:ring-indigo-500">求職追蹤 →</a>
       </div>
-
-      <div class="flex flex-wrap items-center gap-3 mt-4">
-        <a href="applications.html" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100">← 求職追蹤</a>
-
-        <a
-          href="matching.html?id=${encodeURIComponent(matchingId)}"
-          class="inline-flex items-center gap-2
-                 px-4 py-2 rounded-lg
-                 text-sm font-medium
-                 text-indigo-700 bg-indigo-50
-                 hover:bg-indigo-100 transition"
-        >
-          ← 回看匹配結果
-        </a>
-
-        <a
-          href="index.html"
-          class="inline-flex items-center gap-2
-                 px-4 py-2 rounded-lg
-                 text-sm font-medium
-                 text-gray-700 bg-gray-100
-                 hover:bg-gray-200 transition"
-        >
-          ＋ 選擇其他 JD
-        </a>
-
-      </div>
-    </div>
-  `;
+      <p class="text-sm text-gray-500 mt-2 break-words">${escapeHtml(jobInfo)}</p>
+      <nav aria-label="求職信導覽" class="flex flex-wrap items-center gap-5 mt-5 text-sm">
+        <a href="matching.html?id=${encodeURIComponent(matchingId)}" class="text-indigo-700 hover:underline">← 匹配結果</a>
+        <a href="index.html" class="text-gray-500 hover:text-gray-800 hover:underline">選擇其他職缺</a>
+      </nav>
+    </div>`;
 }
 
 function renderVersionTabs() {
@@ -316,6 +295,7 @@ function renderSplitView(letter) {
           <button id="save-edit" disabled class="bg-indigo-600 text-white rounded-lg px-4 py-2 disabled:opacity-50">儲存為新版本</button>
           <button id="reset-edit" class="border rounded-lg px-4 py-2">還原修改</button>
         </div>
+        <p class="text-xs text-gray-500">儲存會新增版本，不會變更追蹤紀錄選用的求職信。</p>
         <p id="edit-feedback" role="status" class="text-sm text-gray-600"></p>
       </div>
       <div class="bg-white rounded-lg shadow p-6 h-fit md:sticky md:top-6">
