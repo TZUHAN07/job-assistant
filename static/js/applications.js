@@ -36,7 +36,7 @@ function renderApplication(row) {
     <td class="p-4 max-w-xs break-words"><p class="font-semibold">${escapeHtml(row.job_title || "未提供職稱")}</p><p class="text-sm text-gray-500 mt-1">${escapeHtml(row.company || "未提供公司")}</p><p class="text-xs text-gray-400 mt-2">紀錄 #${escapeHtml(row.id)}</p></td>
     <td class="p-4 font-semibold whitespace-nowrap">${escapeHtml(score)}</td>
     <td class="p-4 whitespace-nowrap"><select data-status-id="${escapeHtml(row.id)}" aria-label="紀錄 ${escapeHtml(row.id)} 投遞狀態，選擇後自動儲存" class="border rounded-lg px-3 py-2 text-sm cursor-pointer focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 ${color}">${statusLabels.has(row.status) ? "" : '<option value="" selected disabled>未知狀態</option>'}${Array.from(statusLabels, ([value, [text]]) => `<option value="${value}" ${value === row.status ? "selected" : ""}>${text}</option>`).join("")}</select></td>
-    <td class="p-4 max-w-xs break-words"><p>${escapeHtml(letter)}</p>${row.cover_letter_id == null ? "" : `<p class="text-xs text-gray-500 mt-1">${escapeHtml(row.cover_letter_title || "未命名求職信")}</p>`}</td>
+    <td class="p-4 max-w-xs break-words">${row.cover_letter_id == null ? `<p>${escapeHtml(letter)}</p>` : `<a href="letter.html?matching_id=${encodeURIComponent(row.matching_id)}&amp;cover_letter_id=${encodeURIComponent(row.cover_letter_id)}" class="text-indigo-700 underline underline-offset-4 hover:text-indigo-900">查看求職信 ${escapeHtml(letter)}</a>`}${row.cover_letter_id == null ? "" : `<p class="text-xs text-gray-500 mt-1">${escapeHtml(row.cover_letter_title || "未命名求職信")}</p>`}</td>
     <td class="p-4 text-sm whitespace-nowrap"><button type="button" data-edit-id="${escapeHtml(row.id)}" data-edit-field="applied_at" class="text-indigo-700 border border-indigo-100 rounded-lg px-3 py-2 hover:bg-indigo-50 focus:ring-2 focus:ring-indigo-500" aria-label="編輯紀錄 ${escapeHtml(row.id)} 的投遞日期">${row.applied_at ? escapeHtml(formatAppliedAt(row.applied_at)) + " ✎" : "+ 填寫日期"}</button></td>
     <td class="p-4 text-sm max-w-xs break-words">${escapeHtml(row.resume_filename || "未提供履歷名稱")}</td>
     <td class="p-4 min-w-[180px] max-w-xs"><p class="text-sm whitespace-pre-wrap break-words">${escapeHtml(row.notes || "尚無備註")}</p><button type="button" data-edit-id="${escapeHtml(row.id)}" data-edit-field="notes" title="編輯備註" class="mt-2 text-indigo-700 border border-indigo-100 rounded-lg px-3 py-2 text-sm hover:bg-indigo-50 focus:ring-2 focus:ring-indigo-500" aria-label="編輯紀錄 ${escapeHtml(row.id)} 的備註"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg></button></td>
@@ -268,7 +268,6 @@ deleteForm.addEventListener("submit", async event => {
   deleteConfirm.disabled = true;
   deleteConfirm.textContent = "刪除中…";
   try {
-    // 204 沒有 JSON body；只判斷 HTTP 狀態，不解析成功回應。
     const response = await fetch(`${API_BASE}/applications/${deleting.id}`, {method: "DELETE"});
     if (!response.ok && response.status !== 404) {
       const error = await response.json().catch(() => ({}));
@@ -276,7 +275,6 @@ deleteForm.addEventListener("submit", async event => {
     }
     deleteDialog.close();
     showToast(response.status === 404 ? "這筆紀錄已不存在，已重新整理列表" : "求職追蹤已刪除", response.status === 404 ? "info" : "success");
-    // 沿用列表的 offset 修正，當頁最後一筆刪除後會回到有效頁面。
     await loadApplications();
     reloadButton.focus();
   } catch (error) {
