@@ -1,7 +1,7 @@
 from typing import Annotated
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Path
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,7 @@ from starlette import status
 from src.database import get_db
 from src.limiter import limiter
 from src.models import Resume, Job, Matching, CoverLetter
+from src.schemas.cover_letter_edit import CoverLetterEditRequest
 from src.schemas import ResumeParsed, JobParsed, MatchingResult
 from src.services.cover_letter_service import generate_cover_letter
 
@@ -88,18 +89,6 @@ async def generate(
             score=matching_row.score or 0,
         )
 
-        max_version_result = await db.execute(
-            select(func.coalesce(func.max(CoverLetter.version), 0)).where(
-                CoverLetter.matching_id == body.matching_id
-            )
-        )
-        next_version = max_version_result.scalar() + 1
-
-        logger.info(
-            f"Generating cover letter: matching_id={body.matching_id}, "
-            f"version={next_version}, tone={body.tone}, language={body.language}"
-        )
-
         letter_result = await generate_cover_letter(
             resume=resume_parsed,
             job=job_parsed,
@@ -115,6 +104,14 @@ async def generate(
             )
 
         logger.info(f"Cover letter generated: title={letter_result.title!r}")
+
+        await db.execute(select(Matching).where(
+            Matching.id == body.matching_id,
+        ).with_for_update())
+        max_version = await db.scalar(select(func.max(CoverLetter.version)).where(
+            CoverLetter.matching_id == body.matching_id,
+        ))
+        next_version = (max_version or 0) + 1
 
         new_letter = CoverLetter(
             matching_id=body.matching_id,
@@ -211,3 +208,50 @@ async def list_by_matching(
             for letter in letters
         ],
     }
+
+
+@router.post("/{letter_id}/versions", status_code=status.HTTP_201_CREATED)
+async def save_edited_version(
+    letter_id: Annotated[int, Path(gt=0)],
+    body: CoverLetterEditRequest,
+    db: db_dependency,
+):
+    """保存人工修改為新版本，保留原信件及 Application 的選用關係。"""
+    try:
+        source = await db.scalar(select(CoverLetter).where(
+            CoverLetter.id == letter_id, CoverLetter.user_id == 1,
+        ))
+        if source is None:
+            raise HTTPException(404, "Cover letter not found")
+        await db.execute(select(Matching).where(
+            Matching.id == source.matching_id,
+        ).with_for_update())
+        sections = body.sections.model_dump() if body.sections else {}
+        content = "\n\n".join(sections.values()) if sections else body.content
+        max_version = await db.scalar(select(func.max(CoverLetter.version)).where(
+            CoverLetter.matching_id == source.matching_id,
+        ))
+        letter = CoverLetter(
+            user_id=source.user_id, matching_id=source.matching_id,
+            title=source.title, tone=source.tone, language=source.language,
+            version=(max_version or 0) + 1, content=content, **sections,
+        )
+        db.add(letter)
+        await db.commit()
+        await db.refresh(letter)
+        return {"message": "已儲存為新版本", "data": {
+            "id": letter.id, "matching_id": letter.matching_id,
+            "title": letter.title, "content": letter.content,
+            "version": letter.version, "tone": letter.tone,
+            "language": letter.language, "is_favorite": letter.is_favorite,
+            "created_at": letter.created_at,
+            "sections": {key: getattr(letter, key) for key in (
+                "opening", "why_me", "why_company", "call_to_action",
+            )},
+        }}
+    except HTTPException:
+        raise
+    except Exception:
+        await db.rollback()
+        logger.exception("Failed to save edited cover letter")
+        raise HTTPException(500, "儲存失敗，請稍後再試")

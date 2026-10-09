@@ -23,13 +23,19 @@
 
 function renderHeader(el, data) {
   el.innerHTML = `
-    <div class="border-b pb-4">
-      <p class="text-sm text-gray-500 mb-1">匹配度分析</p>
-      <h1 class="text-2xl font-bold text-gray-800">${data.job_title}</h1>
-      <p class="text-gray-600 mt-1">${data.job_company}</p>
-      <span class="inline-block mt-2 bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm">
-        對照履歷: ${data.resume_name || "預設履歷"}
-      </span>
+    <div class="border-b pb-5">
+      <div class="flex items-center justify-between gap-4 mb-3">
+        <p class="text-sm text-gray-500">匹配度分析</p>
+        <a href="applications.html" class="text-sm text-gray-500 hover:text-indigo-700 hover:underline">求職追蹤 →</a>
+      </div>
+      <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div class="min-w-0">
+          <h1 class="text-2xl font-bold text-gray-800 break-words">${escapeHtml(data.job_title)}</h1>
+          <p class="text-gray-600 mt-1">${escapeHtml(data.job_company)}</p>
+          <p class="text-xs text-gray-500 mt-3">對照履歷：${escapeHtml(data.resume_name || "預設履歷")}</p>
+        </div>
+        ${renderTrackingEntry(data.id)}
+      </div>
     </div>
   `;
 }
@@ -43,6 +49,7 @@ function renderContent(el, data) {
     ${renderGoals(data.long_term_goals)}
     ${renderCTA(data.id)}
   `;
+  bindTrackingEntry(data.id);
 }
 
 function renderScore(score) {

@@ -16,6 +16,7 @@ from src.routers import resume as resume_router
 from src.routers import jobs as jobs_router
 from src.routers import matchings as matchings_router
 from src.routers import cover_letters as cover_letters_router
+from src.routers import application as application_router
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +64,12 @@ async def root():
 async def favicon():
     return RedirectResponse(url="/app/job-icon.svg")
 
+
 app.include_router(resume_router.router)
 app.include_router(jobs_router.router)
 app.include_router(matchings_router.router)
 app.include_router(cover_letters_router.router)
+app.include_router(application_router.router)
 
 
 app.mount("/app", StaticFiles(directory="static", html=True), name="static")
