@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "case_id": "case_002",
+  "company": null,
+  "position": "Full Stack 軟體工程師（內部產品）",
+  "case_status": "incomplete",
+  "source": "使用者於對話提供的 Case 2 摘錄；不是完整原始信件。",
+  "candidate_record": {
+    "matching_id": 49,
+    "resume_id": 16,
+    "job_id": 54,
+    "verification_status": "title_matches_only",
+    "note": "目前 API 職稱相符，但尚未確認是產生摘錄的歷史紀錄。"
+  },
+  "snapshots": {
+    "resume_raw": null,
+    "resume_parsed": null,
+    "jd_raw": null,
+    "jd_parsed": null,
+    "matching_result": null
+  },
+  "generation": {
+    "cover_letter_id": null,
+    "generated_at": null,
+    "model": null,
+    "prompt_version": null,
+    "schema_version": null
+  },
+  "original_generated_letter": null,
+  "final_sent_letter": null,
+  "issues": [
+    {
+      "issue_id": "case_002_issue_01",
+      "original_sentence": "從需求訪談到功能落地",
+      "labels": [
+        "FABRICATION"
+      ],
+      "correction_action": "delete",
+      "corrected_sentence": null,
+      "reason": "使用者提供的案例指出需求訪談應刪除；仍需確認原始輸入與實際經歷。",
+      "resume_evidence": [],
+      "jd_evidence": [],
+      "annotation_source": "user_provided_case_summary",
+      "review_status": "pending_source_verification",
+      "first_error_stage": "unknown"
+    },
+    {
+      "issue_id": "case_002_issue_02",
+      "original_sentence": "具備建立可維護、可擴充系統架構的實戰經驗。",
+      "labels": [
+        "CLAIM_INFLATION"
+      ],
+      "correction_action": "rewrite",
+      "corrected_sentence": null,
+      "reason": "系統設計實作不直接證明可維護性或可擴充性。",
+      "resume_evidence": [],
+      "jd_evidence": [],
+      "annotation_source": "user_provided_case_summary",
+      "review_status": "pending_source_verification",
+      "first_error_stage": "unknown"
+    },
+    {
+      "issue_id": "case_002_issue_03",
+      "original_sentence": "Google Gemini 與 Prompt Engineering 的經驗，與職位中建立 AI-assisted development workflow 的要求直接相關，能有效提升開發效率。",
+      "labels": [
+        "ADJACENT_SKILL_INFERENCE",
+        "UNSUPPORTED_OUTCOME"
+      ],
+      "correction_action": "rewrite",
+      "corrected_sentence": "貴公司職位聚焦於內部產品開發，並提及 AI-assisted development workflow，這與我近期投入 AI 應用開發及 Prompt Engineering 的方向有所連結。",
+      "reason": "LLM 整合與 AI 輔助開發流程不能直接等同；效率改善需要成果證據。",
+      "resume_evidence": [],
+      "jd_evidence": [],
+      "annotation_source": "user_provided_case_summary",
+      "review_status": "pending_source_verification",
+      "first_error_stage": "unknown"
+    },
+    {
+      "issue_id": "case_002_issue_04",
+      "original_sentence": "並能獨立完成系統設計、API 開發與雲端部署，特別在內部產品的從零到一開發上具備實作經驗。",
+      "labels": [
+        "CLAIM_INFLATION",
+        "REQUIREMENT_MIRRORING"
+      ],
+      "correction_action": "rewrite",
+      "corrected_sentence": "具備 Node.js、Python、FastAPI 與資料庫開發的專案實作經驗，並累積 API 開發、系統設計、Docker、CI/CD 與雲端部署相關經驗。",
+      "reason": "需確認個人專案是否被改寫為內部產品經驗，不能由職缺需求倒推候選人經歷。",
+      "resume_evidence": [],
+      "jd_evidence": [],
+      "annotation_source": "user_provided_case_summary",
+      "review_status": "pending_source_verification",
+      "first_error_stage": "unknown"
+    }
+  ],
+  "missing_information": [
+    "確認原始求職信 ID 或完整原稿",
+    "確認當時使用的履歷與 JD 快照",
+    "取得當時解析結果與 Matching 輸出",
+    "補充人工確認的完整版本",
+    "確認各項經歷的實際範圍"
+  ],
+  "evaluation_ready": false
+}
