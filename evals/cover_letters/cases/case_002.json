@@ -1,16 +1,16 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "case_id": "case_002",
   "company": null,
   "position": "Full Stack 軟體工程師（內部產品）",
   "case_status": "incomplete",
-  "source": "使用者於對話提供的 Case 2 摘錄；不是完整原始信件。",
+  "source": "使用者指定求職信 48 / v1；依本機保存的目前資料庫快照比對，非已驗證的歷史生成輸入。",
   "candidate_record": {
     "matching_id": 49,
     "resume_id": 16,
     "job_id": 54,
-    "verification_status": "title_matches_only",
-    "note": "目前 API 職稱相符，但尚未確認是產生摘錄的歷史紀錄。"
+    "verification_status": "user_identified_and_snapshot_linkage_verified",
+    "note": "已確認信件 48 關聯 Matching 49、履歷 16、職缺 54；早先摘錄與此信件不逐字相同。"
   },
   "snapshots": {
     "resume_raw": null,
@@ -20,15 +20,69 @@
     "matching_result": null
   },
   "generation": {
-    "cover_letter_id": null,
-    "generated_at": null,
+    "cover_letter_id": 48,
+    "generated_at": "2026-10-06 08:56:02.414397+00:00",
     "model": null,
     "prompt_version": null,
-    "schema_version": null
+    "schema_version": null,
+    "version": 1
   },
   "original_generated_letter": null,
   "final_sent_letter": null,
   "issues": [
+    {
+      "issue_id": "case_002_observed_01",
+      "original_sentence": "這段經驗讓我對運用 AI 工具提升開發效率與建立 AI-assisted development workflow 具備實作經驗，與貴公司對 AI 工具應用的要求不謀而合。",
+      "source_field": "letter.content",
+      "labels": [
+        "ADJACENT_SKILL_INFERENCE",
+        "CLAIM_INFLATION"
+      ],
+      "correction_action": "rewrite",
+      "corrected_sentence": "在 Job Assistant 個人專案中，串接 LLM API，實作履歷與職缺分析、匹配度評估及求職信生成，累積 LLM 與後端服務整合的經驗。",
+      "correction_status": "proposed_pending_user_review",
+      "reason": "目前保存的履歷描述 LLM 求職應用；JD 要求 AI coding tools 開發流程。Matching 僅說有潛在契合點，信件卻宣稱已具備該流程實作經驗。未見支持該主張的履歷證據，不等同確認使用者從未做過。",
+      "resume_evidence": [
+        {
+          "source_field": "resume.parsed_data.summary",
+          "quote": "具備 Node.js、Python、FastAPI、Docker 與 AWS 實作經驗，能獨立完成後端架構、資料庫設計、API 開發、CI/CD 與雲端部署。近期完成 job-assistant（FastAPI + Gemini + PostgreSQL）與 ig-clone（Node.js + MongoDB + AWS EC2），涵蓋 LLM application、Async Backend 與 Production Deployment。過往數位行銷背景培養數據分析與使用者行為洞察能力。"
+        }
+      ],
+      "jd_evidence": [
+        {
+          "source_field": "job.raw_content",
+          "quote": "熟悉使用 AI 工具（Claude Code、ChatGPT、Copilot 等）提升開發效率"
+        }
+      ],
+      "matching_evidence": [
+        {
+          "source_field": "matching.match_reasons",
+          "quote": "LLM 應用開發能力：有 Google Gemini、Prompt Engineering 經驗，並完成 LLM 應用專案 (job-assistant)，與 JD 提及的 AI 工具應用和建立 AI-assisted development workflow 有潛在契合點。"
+        }
+      ],
+      "annotation_source": "comparison_of_current_db_snapshot",
+      "review_status": "experience_boundary_confirmed_by_user",
+      "first_error_stage": "unknown",
+      "earliest_observed_strengthening": "cover_letter_generation_in_current_snapshot",
+      "note": "本句未明確宣稱量測到效率改善，不沿用先前摘錄的 UNSUPPORTED_OUTCOME 標籤。"
+    }
+  ],
+  "missing_information": [
+    "生成當時的輸入是否與目前快照完全一致",
+    "當時的模型、prompt 與 schema 版本",
+    "人工確認的完整寄出版本",
+    "早先四筆摘錄所屬的原始版本",
+    "建議修正句仍待使用者確認"
+  ],
+  "evaluation_ready": false,
+  "local_snapshot": {
+    "path": "evals/cover_letters/local/case_002_current_db.json",
+    "sha256": "231078f66bd53130882d62e1385214271c9514464648cd28631968d586c70100",
+    "captured_at": "2026-10-09T18:03:07.884366+00:00",
+    "historical_inputs_verified": false,
+    "note": "檔案含私人資料，不提交 Git；snapshots 欄位仍為 null，代表尚未建立已驗證的歷史輸入。"
+  },
+  "unverified_excerpts": [
     {
       "issue_id": "case_002_issue_01",
       "original_sentence": "從需求訪談到功能落地",
@@ -41,8 +95,9 @@
       "resume_evidence": [],
       "jd_evidence": [],
       "annotation_source": "user_provided_case_summary",
-      "review_status": "pending_source_verification",
-      "first_error_stage": "unknown"
+      "review_status": "not_found_verbatim_in_letter_48",
+      "first_error_stage": "unknown",
+      "counts_toward_evaluation": false
     },
     {
       "issue_id": "case_002_issue_02",
@@ -56,8 +111,9 @@
       "resume_evidence": [],
       "jd_evidence": [],
       "annotation_source": "user_provided_case_summary",
-      "review_status": "pending_source_verification",
-      "first_error_stage": "unknown"
+      "review_status": "not_found_verbatim_in_letter_48",
+      "first_error_stage": "unknown",
+      "counts_toward_evaluation": false
     },
     {
       "issue_id": "case_002_issue_03",
@@ -72,8 +128,9 @@
       "resume_evidence": [],
       "jd_evidence": [],
       "annotation_source": "user_provided_case_summary",
-      "review_status": "pending_source_verification",
-      "first_error_stage": "unknown"
+      "review_status": "not_found_verbatim_in_letter_48",
+      "first_error_stage": "unknown",
+      "counts_toward_evaluation": false
     },
     {
       "issue_id": "case_002_issue_04",
@@ -88,16 +145,33 @@
       "resume_evidence": [],
       "jd_evidence": [],
       "annotation_source": "user_provided_case_summary",
-      "review_status": "pending_source_verification",
-      "first_error_stage": "unknown"
+      "review_status": "not_found_verbatim_in_letter_48",
+      "first_error_stage": "unknown",
+      "counts_toward_evaluation": false
     }
   ],
-  "missing_information": [
-    "確認原始求職信 ID 或完整原稿",
-    "確認當時使用的履歷與 JD 快照",
-    "取得當時解析結果與 Matching 輸出",
-    "補充人工確認的完整版本",
-    "確認各項經歷的實際範圍"
+  "pipeline_observations": [
+    {
+      "id": "project_detail_loss",
+      "status": "observed_in_current_snapshot",
+      "description": "履歷抽取文字有個人專案及細節；解析結果沒有 projects，experience 只有教學與行銷工作，summary 保留專案摘要但未完整保留具體實作。",
+      "causal_status": "風險已觀察，尚未證明造成上述求職信錯誤。"
+    },
+    {
+      "id": "requirement_interview",
+      "status": "not_a_letter_48_error",
+      "description": "需求訪談出現在 JD，沒有出現在 letter.content，不能標成此信件捏造經歷。"
+    },
+    {
+      "id": "firecrawl_source",
+      "status": "present_in_resume",
+      "description": "此份履歷原文與 skills 都列出 Firecrawl；不能套用其他案例的無來源判定。"
+    }
   ],
-  "evaluation_ready": false
+  "user_confirmation": {
+    "scope": "Case 2 經驗邊界",
+    "statement": "尚未實際使用 AI coding tools 建立固定開發流程，目前只串接 LLM API 分析履歷與職缺、評估匹配度並生成求職信。",
+    "source": "direct_user_message",
+    "historical_inputs_verified": false
+  }
 }
