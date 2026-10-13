@@ -1,7 +1,36 @@
 {
   "description": "依履歷 16 原文人工挑選的局部檢查，不是完整技能清單或 AI 自動標準答案。",
   "expected_projects": {
-    "job-assistant": ["FastAPI", "Gemini", "PostgreSQL"],
-    "ig-clone": ["Node.js", "MongoDB"]
-  }
+    "job-assistant": [
+      {
+        "technology": "FastAPI",
+        "evidence_location": "個人簡介",
+        "evidence_quote": "job-assistant（FastAPI + Gemini + PostgreSQL）"
+      },
+      {
+        "technology": "Gemini",
+        "evidence_location": "個人簡介",
+        "evidence_quote": "job-assistant（FastAPI + Gemini + PostgreSQL）"
+      },
+      {
+        "technology": "PostgreSQL",
+        "evidence_location": "個人簡介",
+        "evidence_quote": "job-assistant（FastAPI + Gemini + PostgreSQL）"
+      }
+    ],
+    "ig-clone": [
+      {
+        "technology": "Node.js",
+        "evidence_location": "個人簡介",
+        "evidence_quote": "ig-clone（Node.js + MongoDB + AWS EC2）"
+      },
+      {
+        "technology": "MongoDB",
+        "evidence_location": "個人簡介",
+        "evidence_quote": "ig-clone（Node.js + MongoDB + AWS EC2）"
+      }
+    ]
+  },
+  "schema_version": "2.0",
+  "resume_id": 16
 }
