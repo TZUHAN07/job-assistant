@@ -692,6 +692,7 @@ async def generate_cover_letter(
     matching: MatchingResult,
     tone: str = "professional",
     language: str = "zh-TW",
+    max_retries: int = 3,
 ) -> Optional[CoverLetterResult]:
     """Generate a personalized cover letter from Resume, Job, and Matching Result.
 
@@ -744,7 +745,7 @@ Matched Skills: {matching.matched_skills}
                 },
             ],
             temperature=0.4,
-            max_retries=3,
+            max_retries=max_retries,
         )
 
         logger.info(
