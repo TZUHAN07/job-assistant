@@ -13,7 +13,7 @@ from src.limiter import limiter
 from src.models import Resume, Job, Matching, CoverLetter
 from src.schemas.cover_letter_edit import CoverLetterEditRequest
 from src.schemas import ResumeParsed, JobParsed, MatchingResult
-from src.services.cover_letter_service import generate_cover_letter
+from src.services.cover_letter_workflow import generate_reviewed_letter
 
 router = APIRouter(prefix="/cover-letters", tags=["Cover Letter"])
 logger = logging.getLogger(__name__)
@@ -89,7 +89,7 @@ async def generate(
             score=matching_row.score or 0,
         )
 
-        letter_result = await generate_cover_letter(
+        letter_result, review_metadata = await generate_reviewed_letter(
             resume=resume_parsed,
             job=job_parsed,
             matching=matching_data,
@@ -121,6 +121,7 @@ async def generate(
             why_me=letter_result.why_me,
             why_company=letter_result.why_company,
             call_to_action=letter_result.call_to_action,
+            review_metadata=review_metadata,
             version=next_version,
             tone=body.tone,
             language=body.language,
@@ -144,6 +145,7 @@ async def generate(
                 "language": new_letter.language,
                 "is_favorite": new_letter.is_favorite,
                 "created_at": new_letter.created_at,
+                "review_metadata": new_letter.review_metadata,
                 "sections": {
                     "opening": letter_result.opening,
                     "why_me": letter_result.why_me,
@@ -198,6 +200,7 @@ async def list_by_matching(
                 "language": letter.language,
                 "is_favorite": letter.is_favorite,
                 "created_at": letter.created_at,
+                "review_metadata": letter.review_metadata,
                 "sections": {
                     "opening": letter.opening,
                     "why_me": letter.why_me,
@@ -245,6 +248,7 @@ async def save_edited_version(
             "version": letter.version, "tone": letter.tone,
             "language": letter.language, "is_favorite": letter.is_favorite,
             "created_at": letter.created_at,
+                "review_metadata": letter.review_metadata,
             "sections": {key: getattr(letter, key) for key in (
                 "opening", "why_me", "why_company", "call_to_action",
             )},

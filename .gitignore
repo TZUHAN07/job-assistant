@@ -68,3 +68,6 @@ scratch/
 *_letters.json
 scripts/*_output.json
 scripts/*_dump.json
+
+# Private evaluation snapshots
+evals/cover_letters/local/

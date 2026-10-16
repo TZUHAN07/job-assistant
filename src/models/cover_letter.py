@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database import Base
@@ -40,6 +41,8 @@ class CoverLetter(Base):
     why_me: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     why_company: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     call_to_action: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # 檢查只適用於這個版本；舊信件與人工新版本保持未檢查。
+    review_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

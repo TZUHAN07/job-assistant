@@ -95,6 +95,7 @@ function renderFullPage() {
     </div>
     ${renderVersionTabs()}
     ${renderControlPanel(current)}
+    <div id="review-panel" aria-live="polite">${renderReview(current)}</div>
     ${renderSplitView(current)}
   `;
 
@@ -119,6 +120,7 @@ function renderFullPage() {
       if (draft.sections) draft.sections[input.dataset.field] = input.value;
       else draft.content = input.value;
       document.getElementById("letter-preview").textContent = draftContent();
+      document.getElementById("review-panel").innerHTML = renderReview(current);
       document.getElementById("save-edit").disabled = !isDirty();
       document.getElementById("edit-feedback").textContent = isDirty() ? "尚未儲存" : "";
     });
@@ -147,32 +149,57 @@ function attachEventListeners() {
   });
 }
 
+function renderReview(letter) {
+  const review = letter.review_metadata;
+  const labels = {
+    no_issues_found: "本次檢查未發現問題",
+    needs_revision: "有內容需要確認",
+    review_failed: "檢查未完成",
+  };
+  if (isDirty() || !review) {
+    return `<p class="text-sm text-gray-500 mb-5">${isDirty() ? "內容已修改，先前檢查不適用於目前草稿。" : "這個版本尚未檢查。"}</p>`;
+  }
+  const categories = {unsupported_claim: "缺乏證據", claim_inflation: "能力誇大", skill_conflation: "技能混淆", unsupported_outcome: "成果缺乏證據", ai_tone: "措辭建議"};
+  return `<section class="border rounded-lg bg-white p-4 mb-5">
+    <h3 class="font-semibold text-gray-800">${escapeHtml(labels[review.status] || "尚未檢查")}</h3>
+    <p class="text-sm text-gray-500 mt-1">${review.revision_applied ? "已自動修正一次。" : ""}AI 檢查供參考，寄出前請確認內容符合實際經驗。</p>
+    ${review.error || review.notice ? `<p class="text-sm text-amber-800 mt-2">${escapeHtml(review.error || review.notice)}</p>` : ""}
+    ${(review.issues || []).map(issue => `<details class="mt-3 border-t pt-3">
+      <summary class="cursor-pointer text-amber-800">${escapeHtml(categories[issue.category] || issue.category)}：${escapeHtml(issue.quote)}</summary>
+      <p class="mt-2 text-sm text-gray-700">${escapeHtml(issue.reason)}</p>
+      <p class="mt-2 text-sm text-gray-700">修改參考：${escapeHtml(issue.suggested_revision)}</p>
+      ${(issue.evidence_ids || []).map(id => `<p class="mt-2 text-xs text-gray-500">參考資料：${escapeHtml(review.evidence?.[id] || id)}</p>`).join("")}
+    </details>`).join("")}
+  </section>`;
+}
+
 async function handleRegenerate() {
   if (!canLeaveDraft()) return;
-  const toneEl = document.getElementById("tone-select");
-  const langEl = document.getElementById("language-select");
-  const tone = toneEl?.value || "formal";
-  const language = langEl?.value || "zh-TW";
-
+  const tone = document.getElementById("tone-select")?.value || "formal";
+  const language = document.getElementById("language-select")?.value || "zh-TW";
   const contentEl = document.getElementById("content");
-  showLoading(contentEl, "AI 正在為您撰寫求職信... (約 5-10 秒)");
-
+  // 保留原 DOM 與草稿；網路失敗時復原，不讓使用者失去編輯內容。
+  const previous = document.createDocumentFragment();
+  while (contentEl.firstChild) previous.appendChild(contentEl.firstChild);
+  isSaving = true;
+  showLoading(contentEl, "正在生成與檢查；必要時會自動修正一次。可能需要數分鐘，請勿重複送出。");
   try {
     const res = await apiCall("/cover-letters/generate", {
       method: "POST",
-      body: JSON.stringify({
-        matching_id: parseInt(matchingId),
-        tone,
-        language,
-      }),
+      body: JSON.stringify({matching_id: parseInt(matchingId), tone, language}),
     });
-    
     allVersions.unshift(res.data);
     currentIdx = 0;
+    const url = new URL(window.location.href);
+    url.searchParams.set("cover_letter_id", res.data.id);
+    window.history.replaceState(null, "", url);
     renderFullPage();
-    showToast(`已生成 v${res.data.version}!`, "success");
+    showToast(`已儲存 v${res.data.version}，請查看檢查結果`, "success");
   } catch (e) {
-    showError(contentEl, `生成失敗: ${e.message}`, () => renderFullPage());
+    contentEl.replaceChildren(previous);
+    showToast(`生成未完成：${e.message}。可重新載入確認是否已儲存。`, "error");
+  } finally {
+    isSaving = false;
   }
 }
 
