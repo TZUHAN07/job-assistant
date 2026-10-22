@@ -41,6 +41,20 @@ function renderHeader(el, data) {
 }
 
 function renderContent(el, data) {
+  const listFields = ["match_reasons", "matched_skills", "missing_skills", "quick_wins", "long_term_goals"];
+  const hasScore = Number.isFinite(data.score) && data.score >= 0 && data.score <= 100;
+  
+  if (!data.processed_at || !hasScore || !listFields.every(key => Array.isArray(data[key]))) {
+    el.innerHTML = `
+      <section class="bg-amber-50 border border-amber-200 rounded-xl p-6" role="status">
+        <h2 class="text-lg font-semibold text-amber-900">匹配分析尚未完成</h2>
+        <p class="text-sm text-amber-800 mt-2">紀錄已保存，但目前沒有完整的評分結果。請返回首頁重新發起分析。</p>
+        <p class="text-sm text-amber-800 mt-2">重新整理只會讀取這筆紀錄，不會重新執行 AI 分析。</p>
+        <a href="index.html" class="inline-block mt-4 text-indigo-700 underline">返回首頁</a>
+      </section>`;
+    bindTrackingEntry(data.id);
+    return;
+  }
   el.innerHTML = `
     ${renderScore(data.score)}
     ${renderReasons(data.match_reasons)}
