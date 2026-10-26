@@ -38,12 +38,12 @@ resume_tool_declaration = {
 }
 
 
-async def load_job_requirements(matching_id: int):
+async def load_job_requirements(matching_id: int, *, user_id: int = 1):
     async with AsyncSessionLocal() as db:
         matching = await db.scalar(
             select(Matching).where(
                 Matching.id == matching_id,
-                Matching.user_id == 1,
+                Matching.user_id == user_id,
             )
         )
 
@@ -53,7 +53,7 @@ async def load_job_requirements(matching_id: int):
         job = await db.scalar(
             select(Job).where(
                 Job.id == matching.job_id,
-                Job.user_id == 1,
+                Job.user_id == user_id,
             )
         )
 
@@ -75,12 +75,12 @@ async def load_job_requirements(matching_id: int):
         }
 
 
-async def load_resume_evidence(matching_id: int):
+async def load_resume_evidence(matching_id: int, *, user_id: int = 1):
     async with AsyncSessionLocal() as db:
         matching = await db.scalar(
             select(Matching).where(
                 Matching.id == matching_id,
-                Matching.user_id == 1,
+                Matching.user_id == user_id,
             )
         )
 
@@ -90,7 +90,7 @@ async def load_resume_evidence(matching_id: int):
         resume = await db.scalar(
             select(Resume).where(
                 Resume.id == matching.resume_id,
-                Resume.user_id == 1,
+                Resume.user_id == user_id,
             )
         )
 
@@ -114,16 +114,18 @@ async def load_resume_evidence(matching_id: int):
         }
 
 
-async def execute_tool(name: str, arguments: dict, matching_id: int):
+async def execute_tool(
+    name: str, arguments: dict, matching_id: int, *, user_id: int = 1
+):
     if arguments:
         return {"error": "這兩個工具都不接受模型提供的參數"}
 
     try:
         if name == "get_job_requirements":
-            return await load_job_requirements(matching_id)
+            return await load_job_requirements(matching_id, user_id=user_id)
 
         if name == "get_resume_evidence":
-            return await load_resume_evidence(matching_id)
+            return await load_resume_evidence(matching_id, user_id=user_id)
 
         return {"error": "不支援這個工具"}
     except ValueError as error:
@@ -131,7 +133,11 @@ async def execute_tool(name: str, arguments: dict, matching_id: int):
 
 
 async def run_interview(
-    client, matching_id: int, *, on_progress: Callable[[str], None] | None = None
+    client,
+    matching_id: int,
+    *,
+    user_id: int = 1,
+    on_progress: Callable[[str], None] | None = None,
 ) -> dict:
     # 顯示方式交給呼叫者決定，API 不必輸出終端機訊息。
     report_progress = on_progress if on_progress is not None else lambda message: None
@@ -264,7 +270,9 @@ async def run_interview(
             if call.name in snapshots and not call.args:
                 result = snapshots[call.name]
             else:
-                result = await execute_tool(call.name, call.args or {}, matching_id)
+                result = await execute_tool(
+                    call.name, call.args or {}, matching_id, user_id=user_id
+                )
 
             if "error" in result:
                 report_progress(f"工具錯誤： {result['error']}")

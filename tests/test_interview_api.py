@@ -1,0 +1,170 @@
+import copy
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock
+
+import pytest
+from sqlalchemy import func, select
+
+from src.models import InterviewSet, Job, Matching, Resume
+from src.routers import interview_sets as api
+from src.main import app
+
+
+@pytest.fixture
+def fake_generator(monkeypatch):
+    now = datetime.now(timezone.utc).isoformat()
+    report = {
+        "schema_version": 1,
+        "matching_id": 1,
+        "created_at": now,
+        "model": "test-model",
+        "model_rounds": 2,
+        "tool_calls": 2,
+        "validation": "test",
+        "sources": {},
+        "evidence_catalog": {},
+        "questions": [
+            {
+                "question": f"題目 {i}",
+                "kind": "hypothetical",
+                "rationale": "職缺需求",
+                "job_evidence_ids": ["job:1:skill:0"],
+                "resume_evidence_ids": [],
+                "job_evidence": [{"id": "job:1:skill:0", "text": "Python"}],
+                "resume_evidence": [],
+            }
+            for i in range(5)
+        ],
+    }
+
+    async def generate(client, matching_id, *, user_id):
+        value = copy.deepcopy(report)
+        value["matching_id"] = matching_id
+        return value
+
+    mock = AsyncMock(side_effect=generate)
+    monkeypatch.setattr(api, "run_interview", mock)
+    previous = app.dependency_overrides.copy()
+    app.dependency_overrides[api.get_interview_client] = lambda: object()
+    try:
+        yield mock
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous)
+
+
+async def seed(db, *, owner=1, resume_owner=None, ready=True):
+    now = datetime.now(timezone.utc)
+    resume = Resume(
+        user_id=owner if resume_owner is None else resume_owner,
+        filename="synthetic.pdf",
+        file_size=1,
+        parsed_data={"test": True},
+        processed_at=now if ready else None,
+    )
+    job = Job(
+        user_id=owner,
+        source_type="text",
+        raw_content="synthetic",
+        parsed_data={"test": True},
+        processed_at=now,
+    )
+    db.add_all([resume, job])
+    await db.flush()
+    matching = Matching(user_id=owner, resume_id=resume.id, job_id=job.id)
+    db.add(matching)
+    await db.commit()
+    return matching.id
+
+
+@pytest.mark.asyncio
+async def test_generate_and_preserve_previous_set(client, db_session, fake_generator):
+    matching_id = await seed(db_session)
+    first = await client.post(
+        "/interview-sets/generate", json={"matching_id": matching_id}
+    )
+    second = await client.post(
+        "/interview-sets/generate", json={"matching_id": matching_id}
+    )
+    assert first.status_code == second.status_code == 201
+    a, b = first.json()["data"], second.json()["data"]
+    assert a["id"] != b["id"]
+    assert len(a["report"]["questions"]) == 5
+    saved = await db_session.get(InterviewSet, a["id"])
+    assert saved.user_id == 1 and saved.report == a["report"]
+    assert await db_session.scalar(select(func.count()).select_from(InterviewSet)) == 2
+    assert fake_generator.await_args.kwargs == {"user_id": 1}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [{}, {"matching_id": 0}, {"matching_id": "63"}, {"matching_id": 1, "user_id": 2}],
+)
+async def test_invalid_request(client, db_session, fake_generator, body):
+    response = await client.post("/interview-sets/generate", json=body)
+    assert response.status_code == 422
+    fake_generator.assert_not_awaited()
+    assert await db_session.scalar(select(func.count()).select_from(InterviewSet)) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "case,status",
+    [
+        ("missing", 404),
+        ("other_owner", 404),
+        ("other_resume_owner", 404),
+        ("unready", 409),
+    ],
+)
+async def test_unusable_source(client, db_session, fake_generator, case, status):
+    matching_id = (
+        999999
+        if case == "missing"
+        else await seed(
+            db_session,
+            owner=2 if case == "other_owner" else 1,
+            resume_owner=2 if case == "other_resume_owner" else None,
+            ready=case != "unready",
+        )
+    )
+    response = await client.post(
+        "/interview-sets/generate", json={"matching_id": matching_id}
+    )
+    assert response.status_code == status
+    fake_generator.assert_not_awaited()
+    assert await db_session.scalar(select(func.count()).select_from(InterviewSet)) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error,status",
+    [(ValueError("private resume must not leak"), 502), (TimeoutError(), 504)],
+)
+async def test_generation_failure_not_saved(
+    client, db_session, fake_generator, error, status
+):
+    matching_id = await seed(db_session)
+    fake_generator.side_effect = error
+    response = await client.post(
+        "/interview-sets/generate", json={"matching_id": matching_id}
+    )
+    assert response.status_code == status
+    assert "private resume" not in response.text
+    assert await db_session.scalar(select(func.count()).select_from(InterviewSet)) == 0
+
+
+@pytest.mark.asyncio
+async def test_commit_failure_rolls_back(
+    client, db_session, fake_generator, monkeypatch
+):
+    matching_id = await seed(db_session)
+    monkeypatch.setattr(
+        db_session, "commit", AsyncMock(side_effect=RuntimeError("storage failure"))
+    )
+    response = await client.post(
+        "/interview-sets/generate", json={"matching_id": matching_id}
+    )
+    assert response.status_code == 500
+    assert await db_session.scalar(select(func.count()).select_from(InterviewSet)) == 0
