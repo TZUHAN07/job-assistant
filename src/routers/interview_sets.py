@@ -4,7 +4,7 @@ import os
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from google import genai
 from google.genai import errors, types
 from sqlalchemy import select
@@ -14,6 +14,7 @@ from src.database import get_db
 from src.limiter import limiter
 from src.models import InterviewSet, Job, Matching, Resume
 from src.schemas.interview import (
+    InterviewGetResponse,
     InterviewGenerateRequest,
     InterviewGenerateResponse,
     InterviewReport,
@@ -133,6 +134,37 @@ async def generate_interview_set(
     except Exception as exc:
         await db.rollback()
         logger.error("Interview request failed: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=500, detail="伺服器處理失敗，請稍後再試"
+        ) from None
+
+
+@router.get("/{interview_set_id}", response_model=InterviewGetResponse)
+@limiter.limit("100/minute")
+async def get_interview_set(
+    request: Request,
+    interview_set_id: Annotated[int, Path(gt=0)],
+    db: db_dependency,
+    user_id: Annotated[int, Depends(get_current_user_id)],
+):
+    """讀取已保存的題組快照，不重新查詢履歷或呼叫 AI。"""
+    try:
+        row = await db.scalar(
+            select(InterviewSet).where(
+                InterviewSet.id == interview_set_id,
+                InterviewSet.user_id == user_id,
+            )
+        )
+        # 不存在與無權讀取使用相同回應，避免透露他人的題組是否存在。
+        if row is None:
+            raise HTTPException(status_code=404, detail="找不到可使用的面試題組")
+        return InterviewGetResponse(
+            message="面試題查詢成功", data=InterviewSetRecord.model_validate(row)
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Interview retrieval failed: %s", type(exc).__name__)
         raise HTTPException(
             status_code=500, detail="伺服器處理失敗，請稍後再試"
         ) from None

@@ -168,3 +168,61 @@ async def test_commit_failure_rolls_back(
     )
     assert response.status_code == 500
     assert await db_session.scalar(select(func.count()).select_from(InterviewSet)) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_saved_snapshot_without_ai(
+    client, db_session, fake_generator, monkeypatch
+):
+    matching_id = await seed(db_session)
+    created = await client.post(
+        "/interview-sets/generate", json={"matching_id": matching_id}
+    )
+    assert created.status_code == 201
+    saved = created.json()["data"]
+    fake_generator.reset_mock()
+
+    # GET 必須不依賴 Gemini client，即使沒有 API key 仍可查詢。
+    def forbidden_client():
+        raise AssertionError("GET must not create a Gemini client")
+
+    app.dependency_overrides[api.get_interview_client] = forbidden_client
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    matching = await db_session.get(Matching, matching_id)
+    resume = await db_session.get(Resume, matching.resume_id)
+    resume.parsed_data = {"changed": True}
+    await db_session.commit()
+    for _ in range(2):
+        response = await client.get(f"/interview-sets/{saved['id']}")
+        assert response.status_code == 200
+        assert response.json()["data"] == saved
+    fake_generator.assert_not_awaited()
+    assert await db_session.scalar(select(func.count()).select_from(InterviewSet)) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path,status", [("0", 422), ("-1", 422), ("abc", 422), ("999999", 404)]
+)
+async def test_get_invalid_or_missing(client, fake_generator, path, status):
+    response = await client.get(f"/interview-sets/{path}")
+    assert response.status_code == status
+    fake_generator.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_other_owner_returns_same_404(client, db_session, fake_generator):
+    matching_id = await seed(db_session)
+    created = await client.post(
+        "/interview-sets/generate", json={"matching_id": matching_id}
+    )
+    row = await db_session.get(InterviewSet, created.json()["data"]["id"])
+    row.user_id = 2
+    await db_session.commit()
+    fake_generator.reset_mock()
+    denied = await client.get(f"/interview-sets/{row.id}")
+    missing = await client.get("/interview-sets/999999")
+    assert denied.status_code == missing.status_code == 404
+    assert denied.json() == missing.json()
+    fake_generator.assert_not_awaited()

@@ -50,3 +50,8 @@ class InterviewSetRecord(BaseModel):
 class InterviewGenerateResponse(BaseModel):
     message: str
     data: InterviewSetRecord
+
+
+class InterviewGetResponse(BaseModel):
+    message: str
+    data: InterviewSetRecord
