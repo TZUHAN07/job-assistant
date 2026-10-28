@@ -5,5 +5,6 @@ from src.models.job import Job
 from src.models.matching import Matching
 from src.models.cover_letter import CoverLetter
 from src.models.application import Application
+from src.models.interview_set import InterviewSet
 
-__all__ = ["Base", "Resume", "Job", "Matching", "CoverLetter", "Application"]
+__all__ = ["Base", "Resume", "Job", "Matching", "CoverLetter", "Application", "InterviewSet"]

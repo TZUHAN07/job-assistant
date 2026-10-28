@@ -17,6 +17,7 @@ from src.routers import jobs as jobs_router
 from src.routers import matchings as matchings_router
 from src.routers import cover_letters as cover_letters_router
 from src.routers import application as application_router
+from src.routers import interview_sets as interview_sets_router
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,7 @@ app.include_router(jobs_router.router)
 app.include_router(matchings_router.router)
 app.include_router(cover_letters_router.router)
 app.include_router(application_router.router)
+app.include_router(interview_sets_router.router)
 
 
 app.mount("/app", StaticFiles(directory="static", html=True), name="static")
