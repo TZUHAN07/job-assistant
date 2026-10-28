@@ -55,3 +55,15 @@ class InterviewGenerateResponse(BaseModel):
 class InterviewGetResponse(BaseModel):
     message: str
     data: InterviewSetRecord
+
+
+class InterviewSetSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    matching_id: int
+    created_at: datetime
+
+
+class InterviewLatestResponse(BaseModel):
+    message: str
+    data: InterviewSetSummary | None

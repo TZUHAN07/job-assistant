@@ -256,6 +256,10 @@ function renderCTA(matchingId) {
         重新選擇職缺 / 履歷
       </a>
       <a
+        href="interview.html?matching_id=${matchingId}"
+        class="text-indigo-700 border border-indigo-200 rounded-xl px-5 py-2.5 hover:bg-indigo-50"
+      >面試準備</a>
+      <a
         href="letter.html?matching_id=${matchingId}"
         class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md hover:shadow-lg transition"
       >

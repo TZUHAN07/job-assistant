@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>面試準備 · Job Assistant</title>
+  <link rel="icon" type="image/svg+xml" href="job-icon.svg">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen">
+  <div class="max-w-4xl mx-auto p-6">
+    <header class="border-b pb-6 mb-6">
+      <div class="flex justify-between items-center gap-4">
+        <h1 class="text-2xl font-bold">面試準備</h1>
+        <a href="applications.html" class="text-sm text-gray-500 hover:text-indigo-700">求職追蹤 →</a>
+      </div>
+      <p id="job-info" class="text-gray-600 mt-3"></p>
+      <a id="back-link" href="index.html" class="inline-block text-indigo-700 mt-4 hover:underline">← 匹配結果</a>
+    </header>
+    <main>
+      <section class="bg-white rounded-xl border p-6 mb-6">
+        <h2 class="font-semibold text-lg">從這份職缺開始練習</h2>
+        <p class="text-sm text-gray-500 mt-2">依履歷專案與職缺準備 5 道面試題，搭配出題理由與參考依據。</p>
+        <div class="flex flex-wrap items-center gap-4 mt-5">
+          <button id="generate" hidden type="button" class="px-5 py-2.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">生成面試題</button>
+          <button id="reload" type="button" class="text-sm text-indigo-700 underline disabled:opacity-50">重新載入已保存題組</button>
+        </div>
+        <p id="status" role="status" aria-live="polite" class="text-sm text-gray-500 mt-4">正在載入…</p>
+        <p id="error" role="alert" class="text-sm text-red-700 mt-3" hidden></p>
+      </section>
+      <section id="questions" aria-label="面試題目" class="space-y-5"></section>
+    </main>
+  </div>
+  <script src="js/common.js?v=tracking-entry-2"></script>
+  <script src="js/interview.js?v=interview-1"></script>
+</body>
+</html>

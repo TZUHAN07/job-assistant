@@ -226,3 +226,54 @@ async def test_get_other_owner_returns_same_404(client, db_session, fake_generat
     assert denied.status_code == missing.status_code == 404
     assert denied.json() == missing.json()
     fake_generator.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_latest_empty_then_newest_summary(client, db_session, fake_generator):
+    matching_id = await seed(db_session)
+    url = f"/interview-sets/latest?matching_id={matching_id}"
+    empty = await client.get(url)
+    assert empty.status_code == 200 and empty.json()["data"] is None
+    fake_generator.assert_not_awaited()
+    ids = []
+    for _ in range(2):
+        created = await client.post(
+            "/interview-sets/generate", json={"matching_id": matching_id}
+        )
+        ids.append(created.json()["data"]["id"])
+    # 固定時間驗證 ID 的次排序，並讓別人的題組具有更大的 ID。
+    first = await db_session.get(InterviewSet, ids[0])
+    second = await db_session.get(InterviewSet, ids[1])
+    second.created_at = first.created_at
+    db_session.add(InterviewSet(user_id=2, matching_id=matching_id, report={}))
+    await db_session.commit()
+    fake_generator.reset_mock()
+    latest = await client.get(url)
+    assert latest.status_code == 200
+    assert latest.json()["data"]["id"] == ids[1]
+    assert set(latest.json()["data"]) == {"id", "matching_id", "created_at"}
+    fake_generator.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query,status",
+    [
+        ("", 422),
+        ("?matching_id=0", 422),
+        ("?matching_id=abc", 422),
+        ("?matching_id=999999", 404),
+    ],
+)
+async def test_latest_invalid_matching(client, fake_generator, query, status):
+    response = await client.get("/interview-sets/latest" + query)
+    assert response.status_code == status
+    fake_generator.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_latest_other_matching_owner(client, db_session, fake_generator):
+    matching_id = await seed(db_session, owner=2)
+    response = await client.get(f"/interview-sets/latest?matching_id={matching_id}")
+    assert response.status_code == 404
+    fake_generator.assert_not_awaited()

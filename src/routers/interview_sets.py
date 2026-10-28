@@ -4,7 +4,7 @@ import os
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from google import genai
 from google.genai import errors, types
 from sqlalchemy import select
@@ -14,6 +14,8 @@ from src.database import get_db
 from src.limiter import limiter
 from src.models import InterviewSet, Job, Matching, Resume
 from src.schemas.interview import (
+    InterviewLatestResponse,
+    InterviewSetSummary,
     InterviewGetResponse,
     InterviewGenerateRequest,
     InterviewGenerateResponse,
@@ -134,6 +136,53 @@ async def generate_interview_set(
     except Exception as exc:
         await db.rollback()
         logger.error("Interview request failed: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=500, detail="伺服器處理失敗，請稍後再試"
+        ) from None
+
+
+@router.get("/latest", response_model=InterviewLatestResponse)
+@limiter.limit("100/minute")
+async def get_latest_interview_set(
+    request: Request,
+    matching_id: Annotated[int, Query(gt=0)],
+    db: db_dependency,
+    user_id: Annotated[int, Depends(get_current_user_id)],
+):
+    """回傳最近題組摘要；matching 存在但沒有題組時，data 為 null。"""
+    try:
+        matching = await db.scalar(
+            select(Matching.id).where(
+                Matching.id == matching_id,
+                Matching.user_id == user_id,
+            )
+        )
+        if matching is None:
+            raise HTTPException(status_code=404, detail="找不到可使用的匹配紀錄")
+        # 只讀摘要欄位，不載入整份履歷快照；同時間建立時以 ID 決定順序。
+        row = (
+            await db.execute(
+                select(
+                    InterviewSet.id,
+                    InterviewSet.matching_id,
+                    InterviewSet.created_at,
+                )
+                .where(
+                    InterviewSet.matching_id == matching_id,
+                    InterviewSet.user_id == user_id,
+                )
+                .order_by(InterviewSet.created_at.desc(), InterviewSet.id.desc())
+                .limit(1)
+            )
+        ).first()
+        return InterviewLatestResponse(
+            message="最近題組查詢成功",
+            data=InterviewSetSummary.model_validate(row) if row is not None else None,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Latest interview retrieval failed: %s", type(exc).__name__)
         raise HTTPException(
             status_code=500, detail="伺服器處理失敗，請稍後再試"
         ) from None
