@@ -7,12 +7,20 @@ from pathlib import Path
 from time import perf_counter
 from uuid import uuid4
 
+from google.genai import errors
+
 logger = logging.getLogger(__name__)
 USAGE_DIR = Path(__file__).resolve().parents[2] / "logs" / "interview_usage"
 TOKEN_FIELDS = (
     "prompt_token_count", "candidates_token_count", "thoughts_token_count",
     "cached_content_token_count", "tool_use_prompt_token_count", "total_token_count",
 )
+
+
+def upstream_status_code(exc):
+    # 僅擷取 SDK 的數字狀態碼，不保存可能含私人資料的錯誤內容。
+    code = exc.code if isinstance(exc, errors.APIError) else None
+    return code if type(code) is int and 100 <= code <= 599 else None
 
 
 class InterviewUsage:
@@ -30,7 +38,7 @@ class InterviewUsage:
     async def generate(self, client, **kwargs):
         started = perf_counter()
         row = {"round": len(self.record["rounds"]) + 1,
-               "status": "failed", "error_type": None,
+               "status": "failed", "error_type": None, "upstream_status_code": None,
                **{field: None for field in TOKEN_FIELDS}}
         self.record["rounds"].append(row)
         try:
@@ -43,6 +51,7 @@ class InterviewUsage:
             return response
         except BaseException as exc:
             row["error_type"] = type(exc).__name__
+            row["upstream_status_code"] = upstream_status_code(exc)
             if isinstance(exc, asyncio.CancelledError):
                 row["status"] = "cancelled"
             raise

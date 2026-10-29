@@ -74,3 +74,20 @@ def test_write_failure_does_not_raise(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(usage_module, 'USAGE_DIR', target)
     usage_module.InterviewUsage(72).finish('failed', 'ValueError')
     assert 'Interview usage write failed' in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("code", [429, 500, 503])
+async def test_upstream_code_is_recorded_without_private_response(tmp_path, monkeypatch, code):
+    from google.genai import errors
+    monkeypatch.setattr(usage_module, "USAGE_DIR", tmp_path)
+    tracker = usage_module.InterviewUsage(72)
+    error = errors.APIError(code, {"error": {"message": "private resume"}})
+    with pytest.raises(errors.APIError):
+        await tracker.generate(fake_client([error]))
+    tracker.finish("failed", type(error).__name__)
+    text = next(tmp_path.glob("*.json")).read_text()
+    data = json.loads(text)
+    assert data["rounds"][0]["upstream_status_code"] == code
+    assert data["rounds"][0]["total_token_count"] is None
+    assert "private resume" not in text

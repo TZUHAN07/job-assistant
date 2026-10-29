@@ -1,3 +1,4 @@
+from src.services.interview_usage import upstream_status_code
 import asyncio
 import logging
 import os
@@ -98,11 +99,23 @@ async def generate_interview_set(
             raise HTTPException(
                 status_code=504, detail="面試題生成逾時，請稍後再試"
             ) from None
-        except (ValueError, errors.APIError, httpx.HTTPError) as exc:
+        except errors.APIError as exc:
+            code = upstream_status_code(exc)
+            logger.warning("Interview upstream failed: %s status=%s", type(exc).__name__, code)
+            detail = "AI 服務回應失敗，請稍後再試；未儲存新題組"
+            if code == 429:
+                detail = "AI 服務額度或請求頻率受限，請稍後再試；未儲存新題組"
+            raise HTTPException(status_code=502, detail=detail) from None
+        except httpx.HTTPError as exc:
+            logger.warning("Interview connection failed: %s", type(exc).__name__)
+            raise HTTPException(
+                status_code=502, detail="無法完成 AI 服務連線，請稍後再試；未儲存新題組"
+            ) from None
+        except ValueError as exc:
             # 不把含履歷或上游回應的例外內容寫入日誌／HTTP 回應。
             logger.warning("Interview generation failed: %s", type(exc).__name__)
             raise HTTPException(
-                status_code=502, detail="面試題生成或驗證失敗，未儲存題組"
+                status_code=502, detail="面試題生成流程或內容驗證未通過，未儲存新題組"
             ) from None
 
         # 生成期間資料可能被刪除；存檔前重新確認，並鎖到交易完成。
