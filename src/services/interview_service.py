@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from google.genai import types
 from sqlalchemy import select
 
+from src.services.interview_usage import InterviewUsage
 from src.database import AsyncSessionLocal
 from src.models import Matching, Job, Resume
 from src.schemas.job_parsed import JobParsed
@@ -139,6 +140,27 @@ async def run_interview(
     user_id: int = 1,
     on_progress: Callable[[str], None] | None = None,
 ) -> dict:
+    usage = InterviewUsage(matching_id)
+    status, error_type = "failed", None
+    try:
+        artifact = await _run_interview(
+            client, matching_id, usage=usage, user_id=user_id, on_progress=on_progress
+        )
+        status = "generation_succeeded"
+        return artifact
+    except BaseException as exc:
+        error_type = type(exc).__name__
+        if isinstance(exc, asyncio.CancelledError):
+            status = "cancelled"
+        raise
+    finally:
+        usage.finish(status, error_type)
+
+
+async def _run_interview(
+    client, matching_id: int, *, usage: InterviewUsage,
+    user_id: int = 1, on_progress: Callable[[str], None] | None = None,
+) -> dict:
     # 顯示方式交給呼叫者決定，API 不必輸出終端機訊息。
     report_progress = on_progress if on_progress is not None else lambda message: None
     tool = types.Tool(
@@ -222,8 +244,8 @@ async def run_interview(
                 )
             ]
 
-        response = await asyncio.to_thread(
-            client.models.generate_content,
+        response = await usage.generate(
+            client,
             model="gemini-2.5-flash",
             contents=contents,
             config=config,
