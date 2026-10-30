@@ -24,3 +24,19 @@ class UserPublic(BaseModel):
 class RegisterResponse(BaseModel):
     message: str
     data: UserPublic
+
+
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: EmailStr = Field(max_length=254)
+    password: SecretStr = Field(min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value):
+        return str(value).lower()
+
+
+class AuthResponse(BaseModel):
+    message: str
+    data: UserPublic

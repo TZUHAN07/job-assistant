@@ -6,6 +6,13 @@ from src.services.password_service import password_hasher
 PASSWORD = 'test-only-long-password'
 
 
+@pytest.fixture(autouse=True)
+def auth_origin(client, monkeypatch):
+    monkeypatch.setenv("AUTH_ORIGIN", "http://test")
+    client.headers["Origin"] = "http://test"
+
+
+
 @pytest.mark.asyncio
 async def test_register_hash_and_duplicate(client, db_session):
     response = await client.post('/auth/register', json={'email': 'Test@EXAMPLE.com', 'password': PASSWORD})
@@ -60,6 +67,8 @@ async def test_users_migration_upgrade_and_downgrade(db_session):
     spec.loader.exec_module(migration)
     connection = await db_session.connection()
     def exercise(sync_connection):
+        from src.models.auth_session import AuthSession
+        AuthSession.__table__.drop(sync_connection)
         User.__table__.drop(sync_connection)
         with Operations.context(MigrationContext.configure(sync_connection)):
             migration.upgrade()
