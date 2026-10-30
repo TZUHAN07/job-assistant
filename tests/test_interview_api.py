@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
+import httpx
+from google.genai import errors
 from sqlalchemy import func, select
 
 from src.models import InterviewSet, Job, Matching, Resume
@@ -139,11 +141,17 @@ async def test_unusable_source(client, db_session, fake_generator, case, status)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "error,status",
-    [(ValueError("private resume must not leak"), 502), (TimeoutError(), 504)],
+    "error,status,message",
+    [
+        (ValueError("private resume must not leak"), 502, "內容驗證未通過"),
+        (TimeoutError(), 504, "逾時"),
+        (errors.ServerError(503, {"error": {"message": "private resume"}}), 502, "AI 服務回應失敗"),
+        (errors.ClientError(429, {"error": {"message": "private resume"}}), 502, "額度或請求頻率受限"),
+        (httpx.ConnectError("private resume"), 502, "AI 服務連線"),
+    ],
 )
 async def test_generation_failure_not_saved(
-    client, db_session, fake_generator, error, status
+    client, db_session, fake_generator, error, status, message
 ):
     matching_id = await seed(db_session)
     fake_generator.side_effect = error
@@ -151,6 +159,7 @@ async def test_generation_failure_not_saved(
         "/interview-sets/generate", json={"matching_id": matching_id}
     )
     assert response.status_code == status
+    assert message in response.json()["detail"]
     assert "private resume" not in response.text
     assert await db_session.scalar(select(func.count()).select_from(InterviewSet)) == 0
 
