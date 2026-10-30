@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_db
 from src.limiter import limiter
 
+from src.routers import auth as auth_router
 from src.routers import resume as resume_router
 from src.routers import jobs as jobs_router
 from src.routers import matchings as matchings_router
@@ -66,6 +67,7 @@ async def favicon():
     return RedirectResponse(url="/app/job-icon.svg")
 
 
+app.include_router(auth_router.router)
 app.include_router(resume_router.router)
 app.include_router(jobs_router.router)
 app.include_router(matchings_router.router)
