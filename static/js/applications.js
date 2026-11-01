@@ -268,7 +268,7 @@ deleteForm.addEventListener("submit", async event => {
   deleteConfirm.disabled = true;
   deleteConfirm.textContent = "刪除中…";
   try {
-    const response = await fetch(`${API_BASE}/applications/${deleting.id}`, {method: "DELETE"});
+    const response = await authFetch(`${API_BASE}/applications/${deleting.id}`, {method: "DELETE"});
     if (!response.ok && response.status !== 404) {
       const error = await response.json().catch(() => ({}));
       throw new Error(typeof error.detail === "string" ? error.detail : `HTTP ${response.status}`);

@@ -46,7 +46,7 @@ AUTH_COOKIE_SECURE=false
 - 匹配同時檢查其履歷與職缺的歸屬；求職信、追蹤、題組也檢查關聯資料。列表先在 SQL 限制本人，再分頁／計數。
 - 成功的私人資料回應設為 `Cache-Control: no-store`。
 - 本次沒有新增資料表或變更欄位，不需新增 Alembic migration。刪除關聯的 ORM 設定改為交由既有 FK CASCADE 處理。
-- 清理過期 session、忘記密碼、Email 驗證及登入頁面尚未實作。
+- 清理過期 session、忘記密碼、Email 驗證及註冊頁面尚未實作。
 
 ## 測試
 
@@ -66,6 +66,20 @@ AUTH_COOKIE_SECURE=false
 5. B 嘗試用 A 的履歷／職缺 ID 建立匹配、用 A 的 matching ID 生成求職信／題組，應回 404 且不呼叫 AI。
 6. 切回 A，原資料仍可正常讀取。登出後再查詢私人資料應回 401。
 
-目前沒有登入頁面；請先在同一個 `127.0.0.1:8000` 的 Swagger 登入，再操作應用頁面。Cookie 過期後需重新登入，不會退回 user_id=1。
+登入頁為 `/app/login.html`。目前使用已註冊的帳號；新帳號仍可透過 Swagger 註冊。Cookie 過期後會導向登入頁，不會退回 user_id=1。
 
 理解順序：`auth_service.get_current_user_id` 辨識「你是誰」→ router 用 `data_access` 條件限制「你能操作哪筆」→ 新增資料明確寫入登入者的 user_id。ORM 的舊 default=1 暫時保留給既有本機資料流程；HTTP API 不依賴它，不代表所有離線腳本都具備身分驗證。
+
+
+## 前端登入流程
+
+- `login.js` 送出 email/password；登入 API 的 401 顯示帳密錯誤，不跳轉。
+- 後端設定 HttpOnly Cookie，前端不讀取 JWT，也不寫入 localStorage。
+- 各資料頁先由 `auth.js` 呼叫 `/auth/me`，成功才載入原本頁面程式，顯示帳號與登出按鈕。
+- `common.js` 的 `authFetch` 統一處理資料 API 的 401；PDF 上傳與刪除也使用它。
+- 身分查詢的網路或伺服器錯誤會顯示重試；登出失敗留在原頁提示，不宣稱已登出。
+- 登入成功回首頁，目前不保留原目的頁。註冊頁留作下一步練習。
+
+手動檢查：未登入進首頁 → 登入頁；錯誤密碼 → 表單提示；正確帳密 → 首頁顯示 email；登出 → 登入頁。前端頁面導向只是使用體驗，真正資料授權仍由後端執行。
+
+本次已用瀏覽器模擬回應驗證登入成功／失敗、登出成功、五個資料頁未登入導向、身分查詢失敗重試、資料 API 401 導向，並確認 390px 寬登入頁沒有水平溢出。真實 Cookie 流程請使用本機已註冊帳號確認。

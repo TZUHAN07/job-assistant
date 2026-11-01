@@ -159,7 +159,7 @@ async function handleResumeUpload(file) {
   formData.append("file", file);
 
   try {
-    const res = await fetch("/resumes/upload", {
+    const res = await authFetch("/resumes/upload", {
       method: "POST",
       body: formData,
     });
