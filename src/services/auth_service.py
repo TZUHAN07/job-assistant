@@ -5,7 +5,7 @@ from typing import Annotated
 from urllib.parse import urlsplit
 
 import jwt
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -90,3 +90,18 @@ async def get_current_principal(
     if row is None:
         raise unauthorized()
     return Principal(user=row[0], session=row[1])
+
+
+async def get_current_user_id(
+    request: Request,
+    response: Response,
+    principal: Annotated[Principal, Depends(get_current_principal)],
+) -> int:
+    # Cookie 會自動隨請求送出；寫入操作還要確認來源，避免跨站代送。
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        require_same_origin(request)
+    response.headers["Cache-Control"] = "no-store"
+    return principal.user.id
+
+
+CurrentUserId = Annotated[int, Depends(get_current_user_id)]

@@ -29,7 +29,10 @@ class Job(Base):
         DateTime(timezone=True),
         nullable=True,
     )
-    matchings: Mapped[list["Matching"]] = relationship(back_populates="job")
+    # FK 已有 ON DELETE CASCADE；不要由 ORM 把子資料外鍵設為 NULL。
+    matchings: Mapped[list["Matching"]] = relationship(
+        back_populates="job", passive_deletes="all",
+    )
 
     def __repr__(self) -> str:
         return f"<Job(id={self.id}, source_type={self.source_type!r})>"

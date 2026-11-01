@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from starlette import status
 
+from src.services.auth_service import CurrentUserId, get_current_user_id
+from src.services.data_access import matching_owned_by
 from src.database import get_db
 from src.limiter import limiter
 from src.models import Resume, Job, Matching
@@ -15,7 +17,7 @@ from src.schemas import ResumeParsed, JobParsed
 from src.services.matching_service import calculate_matching_score
 from src.utils.time_utils import utc_now
 
-router = APIRouter(prefix="/matchings", tags=["Matching"])
+router = APIRouter(prefix="/matchings", tags=["Matching"], dependencies=[Depends(get_current_user_id)])
 logger = logging.getLogger(__name__)
 
 db_dependency = Annotated[AsyncSession, Depends(get_db)]
@@ -31,6 +33,7 @@ class MatchingScoreRequest(BaseModel):
 async def calculate_score(
     request: Request,
     db: db_dependency,
+    user_id: CurrentUserId,
     body: MatchingScoreRequest,
 ):
     """
@@ -45,7 +48,7 @@ async def calculate_score(
 
     try:
         resume_result = await db.execute(
-            select(Resume).where(Resume.id == body.resume_id)
+            select(Resume).where(Resume.id == body.resume_id, Resume.user_id == user_id)
         )
         resume_row = resume_result.scalar_one_or_none()
 
@@ -61,7 +64,7 @@ async def calculate_score(
                 detail=f"Resume {body.resume_id} has no parsed_data (LLM 尚未處理)",
             )
 
-        job_result = await db.execute(select(Job).where(Job.id == body.job_id))
+        job_result = await db.execute(select(Job).where(Job.id == body.job_id, Job.user_id == user_id))
         job_row = job_result.scalar_one_or_none()
 
         if not job_row:
@@ -97,6 +100,7 @@ async def calculate_score(
         processed_at = utc_now() if matching_result else None
 
         new_matching = Matching(
+            user_id=user_id,
             resume_id=body.resume_id,
             job_id=body.job_id,
             **matching_data,
@@ -146,6 +150,7 @@ async def calculate_score(
 async def get_matching(
     request: Request,
     db: db_dependency,
+    user_id: CurrentUserId,
     matching_id: int = Path(..., gt=0, title="Matching ID"),
 ):
     """
@@ -158,7 +163,7 @@ async def get_matching(
     try:
         matching_result = await db.execute(
             select(Matching)
-            .where(Matching.id == matching_id)
+            .where(Matching.id == matching_id, matching_owned_by(user_id))
             .options(selectinload(Matching.resume), selectinload(Matching.job))
         )
         matching_row = matching_result.scalar_one_or_none()
@@ -209,6 +214,7 @@ async def get_matching(
 async def delete_matching(
     request: Request,
     db: db_dependency,
+    user_id: CurrentUserId,
     matching_id: int = Path(..., gt=0, title="Matching ID"),
 ):
     """
@@ -221,7 +227,7 @@ async def delete_matching(
 
     try:
         matching_result = await db.execute(
-            select(Matching).where(Matching.id == matching_id)
+            select(Matching).where(Matching.id == matching_id, matching_owned_by(user_id))
         )
         matching_row = matching_result.scalar_one_or_none()
 

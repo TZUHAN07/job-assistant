@@ -5,12 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models import Application, CoverLetter, Matching, Resume, Job
 
+pytestmark = pytest.mark.usefixtures("authenticated_user")
+
 
 @pytest.fixture
 async def seed_data(db_session: AsyncSession):
     """建立測試所需的預設資料：Resume, Job, Matching, CoverLetter"""
-    resume = Resume(filename="resume.pdf", file_size=128, content_text="Python / Node.js")
-    job = Job(source_type="text", raw_content="Backend Engineer at Tech Co",
+    resume = Resume(user_id=2, filename="resume.pdf", file_size=128, content_text="Python / Node.js")
+    job = Job(user_id=2, source_type="text", raw_content="Backend Engineer at Tech Co",
               parsed_data={"title": "Backend Engineer", "company": "Tech Co"})
     db_session.add_all([resume, job])
     await db_session.commit()
@@ -18,6 +20,7 @@ async def seed_data(db_session: AsyncSession):
     await db_session.refresh(job)
 
     matching = Matching(
+        user_id=2,
         resume_id=resume.id,
         job_id=job.id,
         score=85,
@@ -28,6 +31,7 @@ async def seed_data(db_session: AsyncSession):
     await db_session.refresh(matching)
 
     cover_letter = CoverLetter(
+        user_id=2,
         matching_id=matching.id,
         title="Cover Letter 1",
         content="Hello..."
@@ -112,7 +116,7 @@ async def test_create_application_invalid_body_format(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_create_application_cover_letter_from_other_matching(client, seed_data, db_session):
-    other = Matching(resume_id=seed_data["resume"].id, job_id=seed_data["job"].id)
+    other = Matching(user_id=2, resume_id=seed_data["resume"].id, job_id=seed_data["job"].id)
     db_session.add(other)
     await db_session.commit()
 
@@ -142,6 +146,7 @@ async def test_list_applications_details(client, seed_data, db_session, with_let
 
     selected = seed_data["cover_letter"]
     row = Application(
+        user_id=2,
         matching_id=seed_data["matching"].id,
         resume_id=seed_data["resume"].id,
         job_id=seed_data["job"].id,
@@ -150,6 +155,7 @@ async def test_list_applications_details(client, seed_data, db_session, with_let
         applied_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
     )
     db_session.add_all([row, CoverLetter(
+        user_id=2,
         matching_id=seed_data["matching"].id,
         title="Newer version", content="new text", version=2,
     )])
@@ -188,7 +194,7 @@ async def test_list_applications_pagination_and_missing_data(client, seed_data, 
         job_id=seed_data["job"].id,
         user_id=owner,
         created_at=datetime(2026, 10, day, tzinfo=timezone.utc),
-    ) for day, owner in [(1, 1), (2, 1), (3, 1), (4, 2)]]
+    ) for day, owner in [(1, 2), (2, 2), (3, 2), (4, 3)]]
     db_session.add_all(rows)
     await db_session.commit()
     expected_ids = [row.id for row in rows[:3]][::-1]

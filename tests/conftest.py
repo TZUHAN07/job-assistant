@@ -104,3 +104,25 @@ async def client(db_session):
         app.dependency_overrides.clear()
         app.dependency_overrides.update(previous_overrides)
         limiter.enabled = previous_enabled
+
+
+@pytest_asyncio.fixture
+async def authenticated_user(client, db_session, monkeypatch):
+    """通過真實 JWT/session 驗證，不覆寫 API 的身分依賴；登入本身另有測試。"""
+    from datetime import datetime, timedelta, timezone
+    from src.models import User, AuthSession
+    from src.services.auth_service import COOKIE_NAME, create_token
+
+    monkeypatch.setenv("AUTH_JWT_SECRET", "test-only-access-secret-at-least-32-bytes")
+    monkeypatch.setenv("AUTH_ORIGIN", "http://localhost")
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "false")
+    client.headers["Origin"] = "http://localhost"
+    user = User(id=2, email="owner@example.com", password_hash="unused-in-session-tests")
+    expires = datetime.now(timezone.utc) + timedelta(minutes=30)
+    db_session.add(user)
+    await db_session.flush()
+    session = AuthSession(id="a" * 64, user_id=2, expires_at=expires)
+    db_session.add(session)
+    await db_session.commit()
+    client.cookies.set(COOKIE_NAME, create_token(2, session.id, expires))
+    return user

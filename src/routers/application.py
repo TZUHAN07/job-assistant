@@ -7,6 +7,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
+from src.services.auth_service import CurrentUserId, get_current_user_id
+from src.services.data_access import matching_owned_by, letter_owned_by, application_owned_by
 from src.database import get_db
 from src.limiter import limiter
 from src.models import Application, CoverLetter, Matching
@@ -15,7 +17,7 @@ from src.schemas.application import (
     ApplicationRecord, ApplicationUpdateResponse,
 )
 
-router = APIRouter(prefix="/applications", tags=["Application"])
+router = APIRouter(prefix="/applications", tags=["Application"], dependencies=[Depends(get_current_user_id)])
 logger = logging.getLogger(__name__)
 
 db_dependency = Annotated[AsyncSession, Depends(get_db)]
@@ -26,6 +28,7 @@ db_dependency = Annotated[AsyncSession, Depends(get_db)]
 async def create_application(
     request: Request,
     db: db_dependency,
+    user_id: CurrentUserId,
     body: ApplicationCreate,
 ):
     """
@@ -39,7 +42,7 @@ async def create_application(
 
     try:
         matching_result = await db.execute(
-            select(Matching).where(Matching.id == body.matching_id)
+            select(Matching).where(Matching.id == body.matching_id, matching_owned_by(user_id))
         )
         matching_row = matching_result.scalar_one_or_none()
 
@@ -53,6 +56,7 @@ async def create_application(
             cl_result = await db.execute(
                 select(CoverLetter).where(
                     CoverLetter.id == body.cover_letter_id,
+                    letter_owned_by(user_id),
                     CoverLetter.matching_id == body.matching_id,
                 )
             )
@@ -67,7 +71,7 @@ async def create_application(
                 )
 
         new_application = Application(
-            user_id=1,
+            user_id=user_id,
             matching_id=matching_row.id,
             resume_id=matching_row.resume_id,
             job_id=matching_row.job_id,
@@ -119,12 +123,13 @@ async def create_application(
 async def list_applications(
     request: Request,
     db: db_dependency,
+    user_id: CurrentUserId,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
 ):
     """List tracking records with their selected cover letter version, newest first."""
     try:
-        owner = Application.user_id == 1
+        owner = application_owned_by(user_id)
         total = await db.scalar(select(func.count(Application.id)).where(owner))
         result = await db.execute(
             select(Application)
@@ -176,6 +181,7 @@ async def list_applications(
 async def update_application(
     request: Request,
     db: db_dependency,
+    user_id: CurrentUserId,
     application_id: Annotated[int, Path(gt=0)],
     body: ApplicationUpdate,
 ):
@@ -187,7 +193,7 @@ async def update_application(
         result = await db.execute(
             select(Application).where(
                 Application.id == application_id,
-                Application.user_id == 1,
+                application_owned_by(user_id),
             )
         )
         row = result.scalar_one_or_none()
@@ -212,6 +218,7 @@ async def update_application(
 async def delete_application(
     request: Request,
     db: db_dependency,
+    user_id: CurrentUserId,
     application_id: Annotated[int, Path(gt=0)],
 ):
     """刪除求職追蹤紀錄，保留履歷、職缺、匹配結果與求職信。"""
@@ -219,7 +226,7 @@ async def delete_application(
         result = await db.execute(
             select(Application).where(
                 Application.id == application_id,
-                Application.user_id == 1,
+                application_owned_by(user_id),
             )
         )
         row = result.scalar_one_or_none()

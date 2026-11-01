@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from starlette import status
 
+from src.services.auth_service import CurrentUserId, get_current_user_id
+from src.services.data_access import matching_owned_by, letter_owned_by
 from src.database import get_db
 from src.limiter import limiter
 from src.models import Resume, Job, Matching, CoverLetter
@@ -15,7 +17,7 @@ from src.schemas.cover_letter_edit import CoverLetterEditRequest
 from src.schemas import ResumeParsed, JobParsed, MatchingResult
 from src.services.cover_letter_workflow import generate_reviewed_letter
 
-router = APIRouter(prefix="/cover-letters", tags=["Cover Letter"])
+router = APIRouter(prefix="/cover-letters", tags=["Cover Letter"], dependencies=[Depends(get_current_user_id)])
 logger = logging.getLogger(__name__)
 
 db_dependency = Annotated[AsyncSession, Depends(get_db)]
@@ -35,6 +37,7 @@ class GenerateCoverLetterRequest(BaseModel):
 async def generate(
     request: Request,
     db: db_dependency,
+    user_id: CurrentUserId,
     body: GenerateCoverLetterRequest,
 ):
     """
@@ -49,7 +52,7 @@ async def generate(
     try:
         matching_result = await db.execute(
             select(Matching)
-            .where(Matching.id == body.matching_id)
+            .where(Matching.id == body.matching_id, matching_owned_by(user_id))
             .options(
                 selectinload(Matching.resume),
                 selectinload(Matching.job),
@@ -105,15 +108,18 @@ async def generate(
 
         logger.info(f"Cover letter generated: title={letter_result.title!r}")
 
-        await db.execute(select(Matching).where(
-            Matching.id == body.matching_id,
+        locked_matching = await db.scalar(select(Matching.id).where(
+            Matching.id == body.matching_id, matching_owned_by(user_id),
         ).with_for_update())
+        if locked_matching is None:
+            raise HTTPException(404, "Matching not found")
         max_version = await db.scalar(select(func.max(CoverLetter.version)).where(
-            CoverLetter.matching_id == body.matching_id,
+            CoverLetter.matching_id == body.matching_id, CoverLetter.user_id == user_id,
         ))
         next_version = (max_version or 0) + 1
 
         new_letter = CoverLetter(
+            user_id=user_id,
             matching_id=body.matching_id,
             title=letter_result.title,
             content=letter_result.full_content,
@@ -172,6 +178,7 @@ async def generate(
 async def list_by_matching(
     request: Request,
     db: db_dependency,
+    user_id: CurrentUserId,
     matching_id: int = Query(..., gt=0, description="Matching ID to filter"),
 ):
     """
@@ -180,9 +187,14 @@ async def list_by_matching(
     - Returns list ordered by version desc (newest first)
     - Empty list if no letters yet (not 404)
     """
+    matching = await db.scalar(select(Matching.id).where(
+        Matching.id == matching_id, matching_owned_by(user_id),
+    ))
+    if matching is None:
+        raise HTTPException(404, "Matching not found")
     result = await db.execute(
         select(CoverLetter)
-        .where(CoverLetter.matching_id == matching_id)
+        .where(CoverLetter.matching_id == matching_id, letter_owned_by(user_id))
         .order_by(CoverLetter.version.desc())
     )
     letters = result.scalars().all()
@@ -218,24 +230,27 @@ async def save_edited_version(
     letter_id: Annotated[int, Path(gt=0)],
     body: CoverLetterEditRequest,
     db: db_dependency,
+    user_id: CurrentUserId,
 ):
     """保存人工修改為新版本，保留原信件及 Application 的選用關係。"""
     try:
         source = await db.scalar(select(CoverLetter).where(
-            CoverLetter.id == letter_id, CoverLetter.user_id == 1,
+            CoverLetter.id == letter_id, letter_owned_by(user_id),
         ))
         if source is None:
             raise HTTPException(404, "Cover letter not found")
-        await db.execute(select(Matching).where(
-            Matching.id == source.matching_id,
+        locked_matching = await db.scalar(select(Matching.id).where(
+            Matching.id == source.matching_id, matching_owned_by(user_id),
         ).with_for_update())
+        if locked_matching is None:
+            raise HTTPException(404, "Matching not found")
         sections = body.sections.model_dump() if body.sections else {}
         content = "\n\n".join(sections.values()) if sections else body.content
         max_version = await db.scalar(select(func.max(CoverLetter.version)).where(
-            CoverLetter.matching_id == source.matching_id,
+            CoverLetter.matching_id == source.matching_id, CoverLetter.user_id == user_id,
         ))
         letter = CoverLetter(
-            user_id=source.user_id, matching_id=source.matching_id,
+            user_id=user_id, matching_id=source.matching_id,
             title=source.title, tone=source.tone, language=source.language,
             version=(max_version or 0) + 1, content=content, **sections,
         )

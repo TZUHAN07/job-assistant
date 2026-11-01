@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
+from src.services.auth_service import CurrentUserId, get_current_user_id
 from src.database import get_db
 from src.limiter import limiter
 from src.models.resume import Resume
@@ -18,7 +19,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-router = APIRouter(prefix="/resumes", tags=["Resume"])
+router = APIRouter(prefix="/resumes", tags=["Resume"], dependencies=[Depends(get_current_user_id)])
 
 db_dependency = Annotated[AsyncSession, Depends(get_db)]
 
@@ -30,6 +31,7 @@ MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 async def upload_resume(
     request: Request,
     db: db_dependency,
+    user_id: CurrentUserId,
     file: UploadFile = File(...),
 ):
 
@@ -70,6 +72,7 @@ async def upload_resume(
         processed_at = utc_now() if llm_result else None
 
         new_resume = Resume(
+            user_id=user_id,
             filename=filename,
             file_size=file_size,
             content_text=content_text,
@@ -118,9 +121,9 @@ async def upload_resume(
 
 @router.get("", status_code=status.HTTP_200_OK)
 @limiter.limit("100/minute")
-async def list_resumes(request: Request, db: db_dependency):
+async def list_resumes(request: Request, db: db_dependency, user_id: CurrentUserId):
     result = await db.execute(
-        select(Resume).order_by(Resume.uploaded_at.desc()).limit(20)
+        select(Resume).where(Resume.user_id == user_id).order_by(Resume.uploaded_at.desc()).limit(20)
     )
 
     resumes = result.scalars().all()
@@ -146,6 +149,7 @@ async def list_resumes(request: Request, db: db_dependency):
 async def delete_resume(
     request: Request,
     db: db_dependency,
+    user_id: CurrentUserId,
     resume_id: int = Path(..., gt=0, title="Resume ID"),
 ):
     """
@@ -157,7 +161,7 @@ async def delete_resume(
     """
 
     try:
-        resume_result = await db.execute(select(Resume).where(Resume.id == resume_id))
+        resume_result = await db.execute(select(Resume).where(Resume.id == resume_id, Resume.user_id == user_id))
         resume_row = resume_result.scalar_one_or_none()
 
         if not resume_row:
