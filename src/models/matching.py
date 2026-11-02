@@ -41,7 +41,10 @@ class Matching(Base):
     )
     resume: Mapped["Resume"] = relationship(back_populates="matchings")
     job: Mapped["Job"] = relationship(back_populates="matchings")
-    cover_letters: Mapped[list["CoverLetter"]] = relationship(back_populates="matching")
+    # FK 已有 ON DELETE CASCADE；不要由 ORM 把子資料外鍵設為 NULL。
+    cover_letters: Mapped[list["CoverLetter"]] = relationship(
+        back_populates="matching", passive_deletes="all",
+    )
 
     def __repr__(self) -> str:
         return f"<Matching(id={self.id}, resume_id={self.resume_id}, job_id={self.job_id}, score={self.score})>"

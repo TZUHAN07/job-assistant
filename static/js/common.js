@@ -10,10 +10,23 @@ const API_BASE = "";
  * @param {object} options - fetch options (method / body / headers)
  * @returns {Promise<object>} response JSON
  */
+function redirectToLogin() {
+  window.location.replace("/app/login.html");
+}
+
+async function authFetch(path, options = {}) {
+  const response = await fetch(path, { ...options, credentials: "same-origin" });
+  if (response.status === 401) {
+    redirectToLogin();
+    throw new Error("登入已失效，請重新登入");
+  }
+  return response;
+}
+
 async function apiCall(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...options.headers },
+  const res = await authFetch(`${API_BASE}${path}`, {
     ...options,
+    headers: { "Content-Type": "application/json", ...options.headers },
   });
 
   const data = await res.json().catch(() => ({}));

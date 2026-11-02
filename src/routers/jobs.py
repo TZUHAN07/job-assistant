@@ -7,13 +7,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
+from src.services.auth_service import CurrentUserId, get_current_user_id
 from src.database import get_db
 from src.limiter import limiter
 from src.models.job import Job
 from src.services.jd_service import extract_from_url, extract_from_text
 from src.utils.time_utils import utc_now
 
-router = APIRouter(prefix="/jobs", tags=["Job"])
+router = APIRouter(prefix="/jobs", tags=["Job"], dependencies=[Depends(get_current_user_id)])
 logger = logging.getLogger(__name__)
 
 db_dependency = Annotated[AsyncSession, Depends(get_db)]
@@ -32,6 +33,7 @@ class ParseTextRequest(BaseModel):
 async def parse_jd_from_url(
     request: Request,
     db: db_dependency,
+    user_id: CurrentUserId,
     body: ParseUrlRequest,
 ):
     """Scrape JD URL via Firecrawl → LLM extract → save to DB."""
@@ -56,6 +58,7 @@ async def parse_jd_from_url(
             logger.warning(f"LLM extraction failed (partial save): {body.url}")
 
         new_job = Job(
+            user_id=user_id,
             source_type="url_scrape",
             source_url=body.url,
             raw_content=raw_content,
@@ -99,6 +102,7 @@ async def parse_jd_from_url(
 async def parse_jd_from_text(
     request: Request,
     db: db_dependency,
+    user_id: CurrentUserId,
     body: ParseTextRequest,
 ):
     """Direct text → LLM extract → save to DB (works with any platform, safer for anti-bot)."""
@@ -116,6 +120,7 @@ async def parse_jd_from_text(
             logger.warning("LLM extraction failed (partial save)")
 
         new_job = Job(
+            user_id=user_id,
             source_type="text_paste",
             source_url=None,
             raw_content=body.text,
@@ -156,8 +161,8 @@ async def parse_jd_from_text(
 
 @router.get("", status_code=status.HTTP_200_OK)
 @limiter.limit("100/minute")
-async def list_jobs(request: Request, db: db_dependency):
-    result = await db.execute(select(Job).order_by(Job.created_at.desc()).limit(20)
+async def list_jobs(request: Request, db: db_dependency, user_id: CurrentUserId):
+    result = await db.execute(select(Job).where(Job.user_id == user_id).order_by(Job.created_at.desc()).limit(20)
     )
 
     jobs = result.scalars().all()
@@ -184,6 +189,7 @@ async def list_jobs(request: Request, db: db_dependency):
 async def delete_job(
     request: Request,
     db: db_dependency,
+    user_id: CurrentUserId,
     job_id: int = Path(..., gt=0, title="Job ID"),
 ):
     """
@@ -195,7 +201,7 @@ async def delete_job(
     """
 
     try:
-        job_result = await db.execute(select(Job).where(Job.id == job_id))
+        job_result = await db.execute(select(Job).where(Job.id == job_id, Job.user_id == user_id))
 
         job_row = job_result.scalar_one_or_none()
 

@@ -11,6 +11,8 @@ from src.models import InterviewSet, Job, Matching, Resume
 from src.routers import interview_sets as api
 from src.main import app
 
+pytestmark = pytest.mark.usefixtures("authenticated_user")
+
 
 @pytest.fixture
 def fake_generator(monkeypatch):
@@ -55,7 +57,7 @@ def fake_generator(monkeypatch):
         app.dependency_overrides.update(previous)
 
 
-async def seed(db, *, owner=1, resume_owner=None, ready=True):
+async def seed(db, *, owner=2, resume_owner=None, ready=True):
     now = datetime.now(timezone.utc)
     resume = Resume(
         user_id=owner if resume_owner is None else resume_owner,
@@ -93,9 +95,9 @@ async def test_generate_and_preserve_previous_set(client, db_session, fake_gener
     assert a["id"] != b["id"]
     assert len(a["report"]["questions"]) == 5
     saved = await db_session.get(InterviewSet, a["id"])
-    assert saved.user_id == 1 and saved.report == a["report"]
+    assert saved.user_id == 2 and saved.report == a["report"]
     assert await db_session.scalar(select(func.count()).select_from(InterviewSet)) == 2
-    assert fake_generator.await_args.kwargs == {"user_id": 1}
+    assert fake_generator.await_args.kwargs == {"user_id": 2}
 
 
 @pytest.mark.asyncio
@@ -126,8 +128,8 @@ async def test_unusable_source(client, db_session, fake_generator, case, status)
         if case == "missing"
         else await seed(
             db_session,
-            owner=2 if case == "other_owner" else 1,
-            resume_owner=2 if case == "other_resume_owner" else None,
+            owner=3 if case == "other_owner" else 2,
+            resume_owner=3 if case == "other_resume_owner" else None,
             ready=case != "unready",
         )
     )
@@ -227,7 +229,7 @@ async def test_get_other_owner_returns_same_404(client, db_session, fake_generat
         "/interview-sets/generate", json={"matching_id": matching_id}
     )
     row = await db_session.get(InterviewSet, created.json()["data"]["id"])
-    row.user_id = 2
+    row.user_id = 3
     await db_session.commit()
     fake_generator.reset_mock()
     denied = await client.get(f"/interview-sets/{row.id}")
@@ -254,7 +256,7 @@ async def test_latest_empty_then_newest_summary(client, db_session, fake_generat
     first = await db_session.get(InterviewSet, ids[0])
     second = await db_session.get(InterviewSet, ids[1])
     second.created_at = first.created_at
-    db_session.add(InterviewSet(user_id=2, matching_id=matching_id, report={}))
+    db_session.add(InterviewSet(user_id=3, matching_id=matching_id, report={}))
     await db_session.commit()
     fake_generator.reset_mock()
     latest = await client.get(url)
@@ -282,7 +284,7 @@ async def test_latest_invalid_matching(client, fake_generator, query, status):
 
 @pytest.mark.asyncio
 async def test_latest_other_matching_owner(client, db_session, fake_generator):
-    matching_id = await seed(db_session, owner=2)
+    matching_id = await seed(db_session, owner=3)
     response = await client.get(f"/interview-sets/latest?matching_id={matching_id}")
     assert response.status_code == 404
     fake_generator.assert_not_awaited()

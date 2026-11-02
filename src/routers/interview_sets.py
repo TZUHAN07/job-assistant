@@ -11,6 +11,8 @@ from google.genai import errors, types
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.auth_service import CurrentUserId, get_current_user_id
+from src.services.data_access import matching_owned_by
 from src.database import get_db
 from src.limiter import limiter
 from src.models import InterviewSet, Job, Matching, Resume
@@ -25,14 +27,9 @@ from src.schemas.interview import (
 )
 from src.services.interview_service import run_interview
 
-router = APIRouter(prefix="/interview-sets", tags=["Interview"])
+router = APIRouter(prefix="/interview-sets", tags=["Interview"], dependencies=[Depends(get_current_user_id)])
 logger = logging.getLogger(__name__)
 db_dependency = Annotated[AsyncSession, Depends(get_db)]
-
-
-def get_current_user_id() -> int:
-    # MVP 尚未接登入；不能讓前端自行指定資料擁有者。
-    return 1
 
 
 async def get_interview_client():
@@ -58,7 +55,7 @@ async def generate_interview_set(
     request: Request,
     body: InterviewGenerateRequest,
     db: db_dependency,
-    user_id: Annotated[int, Depends(get_current_user_id)],
+    user_id: CurrentUserId,
     client: Annotated[genai.Client, Depends(get_interview_client)],
 ):
     """依匹配紀錄生成並保存五題。每次成功呼叫新增一組，不覆蓋既有題組。"""
@@ -123,7 +120,7 @@ async def generate_interview_set(
             select(Matching.id)
             .where(
                 Matching.id == body.matching_id,
-                Matching.user_id == user_id,
+                matching_owned_by(user_id),
             )
             .with_for_update()
         )
@@ -160,14 +157,14 @@ async def get_latest_interview_set(
     request: Request,
     matching_id: Annotated[int, Query(gt=0)],
     db: db_dependency,
-    user_id: Annotated[int, Depends(get_current_user_id)],
+    user_id: CurrentUserId,
 ):
     """回傳最近題組摘要；matching 存在但沒有題組時，data 為 null。"""
     try:
         matching = await db.scalar(
             select(Matching.id).where(
                 Matching.id == matching_id,
-                Matching.user_id == user_id,
+                matching_owned_by(user_id),
             )
         )
         if matching is None:
@@ -207,14 +204,15 @@ async def get_interview_set(
     request: Request,
     interview_set_id: Annotated[int, Path(gt=0)],
     db: db_dependency,
-    user_id: Annotated[int, Depends(get_current_user_id)],
+    user_id: CurrentUserId,
 ):
-    """讀取已保存的題組快照，不重新查詢履歷或呼叫 AI。"""
+    """檢查資料歸屬後讀取題組快照，不重建內容或呼叫 AI。"""
     try:
         row = await db.scalar(
             select(InterviewSet).where(
                 InterviewSet.id == interview_set_id,
                 InterviewSet.user_id == user_id,
+                InterviewSet.matching.has(matching_owned_by(user_id)),
             )
         )
         # 不存在與無權讀取使用相同回應，避免透露他人的題組是否存在。
