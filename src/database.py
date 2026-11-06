@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 from dotenv import load_dotenv
+from src.database_url import async_database_options
 
 load_dotenv()
 
@@ -14,8 +15,11 @@ if not DATABASE_URL:
     raise ValueError("DATABASE_URL is not set in .env")
 
 
+async_url, connect_args = async_database_options(DATABASE_URL)
+
 engine = create_async_engine(
-    DATABASE_URL,
+    async_url,
+    connect_args=connect_args,
     echo=False,            
     pool_pre_ping=True,    
 )
