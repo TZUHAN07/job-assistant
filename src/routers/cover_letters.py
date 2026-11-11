@@ -12,7 +12,8 @@ from src.services.auth_service import CurrentUserId, get_current_user_id
 from src.services.data_access import matching_owned_by, letter_owned_by
 from src.database import get_db
 from src.limiter import limiter
-from src.models import Resume, Job, Matching, CoverLetter
+from src.models import Resume, Job, Matching, CoverLetter, CoverLetterTemplate
+from src.services.cover_letter_template_service import generate_from_template, resume_fingerprint, template_snapshot
 from src.schemas.cover_letter_edit import CoverLetterEditRequest
 from src.schemas import ResumeParsed, JobParsed, MatchingResult
 from src.services.cover_letter_workflow import generate_reviewed_letter
@@ -25,6 +26,7 @@ db_dependency = Annotated[AsyncSession, Depends(get_db)]
 
 class GenerateCoverLetterRequest(BaseModel):
     matching_id: int = Field(..., gt=0, description="Matching ID from DB")
+    template_id: int | None = Field(default=None, gt=0)
     tone: str = Field(
         default="professional",
         description="professional / casual / formal / enthusiastic",
@@ -92,13 +94,27 @@ async def generate(
             score=matching_row.score or 0,
         )
 
-        letter_result, review_metadata = await generate_reviewed_letter(
-            resume=resume_parsed,
-            job=job_parsed,
-            matching=matching_data,
-            tone=body.tone,
-            language=body.language,
-        )
+        if body.template_id is not None:
+            template = await db.scalar(select(CoverLetterTemplate).where(
+                CoverLetterTemplate.id == body.template_id,
+                CoverLetterTemplate.user_id == user_id,
+                CoverLetterTemplate.resume_id == resume_row.id))
+            if template is None:
+                raise HTTPException(404, "Template not found")
+            if template.resume_hash != resume_fingerprint(resume_row):
+                raise HTTPException(409, "履歷已變更，請重新確認並儲存底稿")
+            if template.language != body.language:
+                raise HTTPException(409, "請使用與底稿相同的語言")
+            letter_result, review_metadata = await generate_from_template(
+                resume_parsed, job_parsed, template_snapshot(template))
+        else:
+            letter_result, review_metadata = await generate_reviewed_letter(
+                resume=resume_parsed,
+                job=job_parsed,
+                matching=matching_data,
+                tone=body.tone,
+                language=body.language,
+            )
 
         if letter_result is None:
             raise HTTPException(
