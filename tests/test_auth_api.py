@@ -68,6 +68,8 @@ async def test_users_migration_upgrade_and_downgrade(db_session):
     connection = await db_session.connection()
     def exercise(sync_connection):
         from src.models.auth_session import AuthSession
+        from src.models.cover_letter_template import CoverLetterTemplate
+        CoverLetterTemplate.__table__.drop(sync_connection)
         AuthSession.__table__.drop(sync_connection)
         User.__table__.drop(sync_connection)
         with Operations.context(MigrationContext.configure(sync_connection)):

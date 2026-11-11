@@ -5,6 +5,10 @@ let matchingInfo = null;
 let draft = null;
 let originalDraft = "";
 let isSaving = false;
+let templates = [];
+let selectedTemplateId = null;
+let templateBusy = false;
+let templateDirty = false;
 const sectionNames = {opening: "開場", why_me: "為何選我", why_company: "為何貴公司", call_to_action: "結尾與邀約"};
 
 function isDirty() { return draft !== null && JSON.stringify(draft) !== originalDraft; }
@@ -13,7 +17,7 @@ function draftContent() {
   if (!isDirty()) return allVersions[currentIdx].content;
   return draft.sections ? Object.values(draft.sections).join("\n\n") : draft.content; }
 window.addEventListener("beforeunload", event => {
-  if (isDirty() || isSaving) { event.preventDefault(); event.returnValue = ""; }
+  if (isDirty() || isSaving || templateDirty || templateBusy) { event.preventDefault(); event.returnValue = ""; }
 });
 document.addEventListener("click", event => {
   if (event.target.closest("a[href]") && !canLeaveDraft()) event.preventDefault();
@@ -27,6 +31,7 @@ document.addEventListener("click", event => {
   }
 
   await loadVersions();
+  await loadTemplates();
 })();
 
 async function loadVersions() {
@@ -96,10 +101,12 @@ function renderFullPage() {
     ${renderVersionTabs()}
     ${renderControlPanel(current)}
     <div id="review-panel" aria-live="polite">${renderReview(current)}</div>
+    <button id="use-letter-template" class="mb-4 border border-indigo-600 text-indigo-700 rounded-lg px-4 py-2">用這封信建立底稿</button>
     ${renderSplitView(current)}
   `;
 
   attachEventListeners();
+  document.getElementById("use-letter-template").onclick = useLetterAsTemplate;
   let lockedControls = [];
   bindTrackingEntry(matchingId, current.id, {
     blockReason: () => isSaving ? "正在處理，請稍候。" : isDirty() ? "請先將修改儲存為新版本，再使用該版本加入追蹤。" : "",
@@ -174,6 +181,7 @@ function renderReview(letter) {
 }
 
 async function handleRegenerate() {
+  if (templateBusy || templateDirty) { showToast("請先儲存底稿或重新選擇已儲存底稿，再生成。", "error"); return; }
   if (!canLeaveDraft()) return;
   const tone = document.getElementById("tone-select")?.value || "formal";
   const language = document.getElementById("language-select")?.value || "zh-TW";
@@ -182,11 +190,17 @@ async function handleRegenerate() {
   const previous = document.createDocumentFragment();
   while (contentEl.firstChild) previous.appendChild(contentEl.firstChild);
   isSaving = true;
-  showLoading(contentEl, "正在生成與檢查；必要時會自動修正一次。可能需要數分鐘，請勿重複送出。");
+  const templateControls = [...document.querySelectorAll("#template-panel input, #template-panel textarea, #template-panel select, #template-panel button")];
+  templateControls.forEach(el => el.disabled = true);
+  showLoading(contentEl, selectedTemplateId
+    ? "正在生成第三段與檢查；其餘段落保留底稿內容。請勿重複送出。"
+    : "正在生成與檢查；必要時會自動修正一次。可能需要數分鐘，請勿重複送出。");
   try {
     const res = await apiCall("/cover-letters/generate", {
       method: "POST",
-      body: JSON.stringify({matching_id: parseInt(matchingId), tone, language}),
+      body: JSON.stringify({matching_id: parseInt(matchingId), tone,
+        language: templates.find(t => t.id === selectedTemplateId)?.language || language,
+        template_id: selectedTemplateId}),
     });
     allVersions.unshift(res.data);
     currentIdx = 0;
@@ -200,6 +214,7 @@ async function handleRegenerate() {
     showToast(`生成未完成：${e.message}。可重新載入確認是否已儲存。`, "error");
   } finally {
     isSaving = false;
+    templateControls.forEach(el => el.disabled = false);
   }
 }
 
@@ -361,4 +376,117 @@ async function saveEditedVersion() {
     isSaving = false;
     controls.forEach((el, index) => { el.disabled = disabledStates[index]; });
   }
+}
+
+
+async function loadTemplates() {
+  const panel = document.getElementById("template-panel");
+  try {
+    const res = await apiCall(`/cover-letter-templates?matching_id=${encodeURIComponent(matchingId)}`);
+    templates = res.data;
+    renderTemplates();
+  } catch (error) {
+    panel.innerHTML = `<p role="alert" class="text-red-700">底稿載入失敗：${escapeHtml(error.message)}</p><button id="retry-templates" class="underline">重試</button>`;
+    document.getElementById("retry-templates").onclick = loadTemplates;
+  }
+}
+
+function renderTemplates() {
+  const panel = document.getElementById("template-panel");
+  panel.innerHTML = `<details class="bg-white border rounded-lg p-5" ${templates.length ? "open" : ""}>
+    <summary class="font-semibold cursor-pointer">${templates.length ? "選用已確認的底稿" : "已有自己的內容？自行建立底稿"}</summary>
+    <p class="text-sm text-gray-600 my-3">同一份履歷可重用底稿。選用後，第一、二、四段固定，AI 只生成第三段；檢查建議不會自動改寫固定段落。</p>
+    <label for="template-select">生成方式</label>
+    <select id="template-select" class="border rounded p-2 w-full my-2">
+      <option value="">不使用底稿（原本的整封生成）</option>
+      ${templates.map(t => `<option value="${t.id}">${escapeHtml(t.name)} · #${t.id}${t.stale ? "（履歷已變更，需重新確認）" : ""}</option>`).join("")}
+    </select>
+    <button id="new-template" type="button" class="underline text-indigo-700 mb-3">自行撰寫新底稿</button>
+    <form id="template-form" class="space-y-3">
+      <label class="block">底稿名稱<input id="template-name" required maxlength="100" class="border rounded p-2 w-full" placeholder="例如：後端求職版、UI 設計版"></label>
+      <label class="block">底稿語言<select id="template-language" class="border rounded p-2"><option value="zh-TW">繁體中文</option><option value="en-US">English</option></select></label>
+      <p class="text-sm text-gray-600">第一段需包含 {{company}} 與 {{job_title}}，生成時會替換公司及職稱。姓名與真實經驗請自行確認。</p>
+      <label class="block">第一段：自我介紹<textarea id="template-opening" required maxlength="10000" rows="4" class="border rounded p-2 w-full" placeholder="{{company}} 招募團隊 您好：&#10;我是…，希望應徵 {{job_title}}。"></textarea></label>
+      <label class="block">第二段：相關經驗與成果<textarea id="template-why_me" required maxlength="10000" rows="6" class="border rounded p-2 w-full" placeholder="描述你的工作、作品、專案或研究；只保留有依據的內容。"></textarea></label>
+      <label class="block">第四段：結尾與作品連結<textarea id="template-call_to_action" required maxlength="10000" rows="3" class="border rounded p-2 w-full" placeholder="填入真實連結及署名，沒有作品集可省略。"></textarea></label>
+      <p class="text-sm text-gray-600">儲存代表你已確認這三段內容。每次儲存都會新增底稿版本，不覆蓋既有信件。生成會使用已儲存的版本。</p>
+      <button id="template-save" type="submit" class="bg-indigo-600 text-white rounded px-4 py-2">確認並儲存新底稿</button>
+      <span id="template-feedback" role="status"></span>
+    </form>
+  </details>`;
+  const select = document.getElementById("template-select");
+  select.value = selectedTemplateId || "";
+  const fill = () => {
+    const t = templates.find(t => t.id === selectedTemplateId);
+    document.getElementById("template-name").value = t?.name || "";
+    document.getElementById("template-language").value = t?.language || "zh-TW";
+    for (const key of ["opening", "why_me", "call_to_action"]) document.getElementById(`template-${key}`).value = t?.[key] || "";
+    templateDirty = false;
+    document.getElementById("template-feedback").textContent = t?.stale ? "請核對更新後的履歷，再儲存新底稿。" : t ? "已選用底稿；生成時不會改寫上述內容。" : "尚未選用底稿";
+  };
+  fill();
+  select.onchange = () => {
+    if (templateBusy || isSaving || (templateDirty && !window.confirm("放棄尚未儲存的底稿修改？"))) { select.value = selectedTemplateId || ""; return; }
+    selectedTemplateId = select.value ? Number(select.value) : null;
+    fill();
+  };
+  document.getElementById("new-template").onclick = () => {
+    if (templateBusy || isSaving || (templateDirty && !window.confirm("放棄尚未儲存的底稿修改？"))) return;
+    selectedTemplateId = null; select.value = ""; fill();
+    document.getElementById("template-name").focus();
+  };
+  const form = document.getElementById("template-form");
+  form.oninput = () => { templateDirty = true; document.getElementById("template-feedback").textContent = "底稿尚未儲存"; };
+  form.onsubmit = async event => {
+    event.preventDefault();
+    if (templateBusy || isSaving || !form.reportValidity()) return;
+    const body = {matching_id: Number(matchingId), name: document.getElementById("template-name").value,
+      language: document.getElementById("template-language").value};
+    for (const key of ["opening", "why_me", "call_to_action"]) body[key] = document.getElementById(`template-${key}`).value;
+    templateBusy = true;
+    const controls = [...form.elements, select]; controls.forEach(el => el.disabled = true);
+    try {
+      const res = await apiCall("/cover-letter-templates", {method: "POST", body: JSON.stringify(body)});
+      templates.unshift({...res.data, stale: false}); selectedTemplateId = res.data.id; templateDirty = false;
+      renderTemplates();
+      showToast("底稿已保存並選用，接著可生成求職信。", "success");
+    } catch (error) {
+      document.getElementById("template-feedback").textContent = error.message;
+    } finally {
+      templateBusy = false; controls.forEach(el => el.disabled = false);
+    }
+  };
+}
+
+
+function useLetterAsTemplate() {
+  if (isSaving || templateBusy) return;
+  if (!draft?.sections) {
+    showToast("這封舊信沒有分段資料，請使用自行建立底稿，將內容分別貼入三個段落。", "error");
+    return;
+  }
+  if (templateDirty && !window.confirm("要以目前信件取代尚未儲存的底稿內容嗎？")) return;
+  const current = allVersions[currentIdx];
+  const fields = {...draft.sections};
+  // 僅替換已知的完整名稱；其餘公司專屬描述仍需使用者確認。
+  const replacements = [
+    [matchingInfo?.job_company, "{{company}}"],
+    [matchingInfo?.job_title, "{{job_title}}"],
+  ].filter(([value]) => value && value !== "未知公司").sort((a, b) => b[0].length - a[0].length);
+  const escapePattern = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = replacements.length ? new RegExp(replacements.map(([value]) => escapePattern(value)).join("|"), "g") : null;
+  for (const key of ["opening", "why_me", "call_to_action"]) {
+    if (pattern) fields[key] = fields[key].replace(pattern, value => replacements.find(([name]) => name === value)[1]);
+  }
+  const missing = ["{{company}}", "{{job_title}}"].filter(token => !fields.opening.includes(token));
+  selectedTemplateId = null;
+  renderTemplates();
+  document.querySelector("#template-panel details").open = true;
+  document.getElementById("template-name").value = `求職信 v${current.version} 底稿`;
+  document.getElementById("template-language").value = current.language || "zh-TW";
+  for (const key of ["opening", "why_me", "call_to_action"]) document.getElementById(`template-${key}`).value = fields[key];
+  templateDirty = true;
+  document.getElementById("template-feedback").textContent = "已帶入目前編輯內容，尚未儲存。請確認事實、移除公司專屬描述。" + (missing.length ? `第一段請加入 ${missing.join(" 與 ")}。` : "確認公司與職稱替換位置後，再儲存底稿。");
+  document.getElementById("template-panel").scrollIntoView({behavior: "smooth", block: "start"});
+  document.getElementById("template-name").focus();
 }

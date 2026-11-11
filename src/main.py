@@ -67,6 +67,9 @@ async def favicon():
     return RedirectResponse(url="/app/job-icon.svg")
 
 
+from src.routers import cover_letter_templates
+app.include_router(cover_letter_templates.router)
+
 app.include_router(auth_router.router)
 app.include_router(resume_router.router)
 app.include_router(jobs_router.router)
